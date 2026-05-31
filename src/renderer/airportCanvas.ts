@@ -97,6 +97,40 @@ export function drawAirport(ctx: CanvasRenderingContext2D, w: number, h: number)
     ctx.fillText(`G${i + 1}`, gx, 46)
   }
 
+  // Subzona cola de embarque (bajo jetways)
+  ctx.strokeStyle = 'rgba(34,197,94,0.25)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.beginPath(); ctx.moveTo(582, 70); ctx.lineTo(888, 70); ctx.stroke()
+  ctx.setLineDash([])
+  ctx.fillStyle = 'rgba(34,197,94,0.04)'
+  ctx.fillRect(582, 70, 306, 60)
+
+  // Subzona sala de espera
+  ctx.strokeStyle = 'rgba(34,197,94,0.15)'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.beginPath(); ctx.moveTo(582, 130); ctx.lineTo(888, 130); ctx.stroke()
+  ctx.setLineDash([])
+  _label(ctx, 735, 144, 'SALA DE ESPERA', 'rgba(74,222,128,0.5)')
+
+  // ── Corredor de salidas (pasillo entre zonas) ──────────────────────────────
+  ctx.fillStyle = 'rgba(30,55,100,0.45)'
+  ctx.fillRect(10, 268, 880, 20)
+  ctx.strokeStyle = 'rgba(96,165,250,0.3)'
+  ctx.lineWidth = 1
+  ctx.beginPath(); ctx.moveTo(10, 268); ctx.lineTo(890, 268); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(10, 288); ctx.lineTo(890, 288); ctx.stroke()
+  // Flechas de flujo
+  ctx.fillStyle = 'rgba(96,165,250,0.45)'
+  ctx.font = 'bold 12px sans-serif'
+  ctx.textAlign = 'center'
+  for (let fx = 80; fx < 870; fx += 100) ctx.fillText('›', fx, 281)
+  ctx.font = '8px monospace'
+  ctx.fillStyle = 'rgba(148,163,184,0.6)'
+  ctx.textAlign = 'left'
+  ctx.fillText('CORREDOR SALIDAS', 16, 281)
+
   // ── Apron ─────────────────────────────────────────────────────────────────
   ctx.fillStyle = '#161f2e'
   ctx.strokeStyle = '#1f2937'

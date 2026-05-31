@@ -159,4 +159,3 @@ function runTest() {
   console.log(`  reset()                → λ = ${gen.getLambda()}  (esperado 4)`)
 }
 
-runTest()

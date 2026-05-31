@@ -312,4 +312,3 @@ function runTest() {
   }
 }
 
-runTest()

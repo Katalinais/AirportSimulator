@@ -12,6 +12,7 @@
     "brain.js": "^2.0.0-beta.24",
     "chart.js": "^4.4.0",
     "jstat": "^1.9.6",
+    "pixi.js": "^7.4.3",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",

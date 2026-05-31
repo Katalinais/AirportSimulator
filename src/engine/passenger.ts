@@ -46,6 +46,7 @@ export class Passenger {
   readonly flightId: number
   readonly patience: number          // minutos; misma unidad que currentTime
   state: PassengerState
+  gateId: number                     // puerta asignada al embarque (-1 = sin asignar)
   position: { x: number; y: number }
   readonly timestamps: Timestamps
 
@@ -58,6 +59,7 @@ export class Passenger {
     this.flightId = flightId
     this.patience = 3 + Math.random() * 7   // [3, 10] minutos
     this.state = 'arriving'
+    this.gateId = -1
     this.position = { x: 0, y: 0 }
     this.timestamps = {
       arrivedAt,
@@ -207,4 +209,3 @@ function runTest() {
   }
 }
 
-runTest()

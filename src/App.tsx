@@ -1,66 +1,118 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 import { useSimulation, DEFAULT_CONFIG, SimConfig } from './hooks/useSimulation'
-import { useMetrics }    from './hooks/useMetrics'
-import { classifyRho, fmtSimTime, fmtNum } from './engine/metrics'
+import { useMetrics } from './hooks/useMetrics'
+import { fmtSimTime, fmtNum, classifyRho } from './engine/metrics'
 
 import { ControlPanel }  from './ui/ControlPanel'
+import { ToggleModules } from './ui/ToggleModules'
 import { MetricsCard }   from './ui/MetricsCard'
 import { QueueChart }    from './ui/QueueChart'
-import { ToggleModules } from './ui/ToggleModules'
 
-import { drawAirport, CANVAS_W, CANVAS_H } from './renderer/airportCanvas'
-import { drawPassengers, drawLegend }      from './renderer/passengerRenderer'
-import { drawPlanes }                      from './renderer/planeRenderer'
+import { initPixiScene, destroyPixiScene, PixiScene } from './renderer/pixiApp'
+import { drawBackground }                              from './renderer/drawBackground'
+import { drawPassengers, clearPassengerVisuals }       from './renderer/drawPassengers'
+import { drawPlanes, clearPlanePixiVisuals }           from './renderer/drawPlanes'
+
+import type { SimState } from './hooks/useSimulation'
 
 export default function App() {
   const [config, setConfig] = useState<SimConfig>(DEFAULT_CONFIG)
+  const [showControls, setShowControls] = useState(true)
+  const [showMetrics,  setShowMetrics]  = useState(false)
 
   const handleConfigChange = useCallback((partial: Partial<SimConfig>) => {
     setConfig(prev => ({ ...prev, ...partial }))
   }, [])
 
-  const { state, play, pause, reset, step } = useSimulation(config)
+  const { state, play, pause, reset: _reset, step } = useSimulation(config)
+  const reset = useCallback(() => {
+    clearPassengerVisuals()
+    clearPlanePixiVisuals()
+    _reset()
+  }, [_reset])
+
   const history = useMetrics(state)
 
-  // ── Canvas ─────────────────────────────────────────────────────────────────
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  // ── PixiJS ────────────────────────────────────────────────────────────────
+  const mountRef  = useRef<HTMLDivElement>(null)
+  const sceneRef  = useRef<PixiScene | null>(null)
+  const stateRef  = useRef<SimState>(state)
+  const configRef = useRef<SimConfig>(config)
 
+  // mantener refs en sync sin recrear la escena
+  useEffect(() => { stateRef.current  = state  }, [state])
+  useEffect(() => { configRef.current = config }, [config])
+
+  // inicializar PixiJS una sola vez
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const mount = mountRef.current
+    if (!mount) return
 
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H)
-    drawAirport(ctx, CANVAS_W, CANVAS_H)
-    drawPassengers(ctx, state.passengers)
-    drawPlanes(ctx, state.planes, state.simTime)
-    drawLegend(ctx, 20, 452)
-  }, [state])
+    const scene = initPixiScene(mount, config.gates ?? 4)
+    sceneRef.current = scene
 
-  // ── Métricas derivadas ─────────────────────────────────────────────────────
-  const { Lq, Wq, rho, throughput, abandonRate } = state.metrics
-  const rhoLevel = classifyRho(rho)
+    // dibujar fondo estático
+    drawBackground(scene.bgGfx, scene.labelContainer, config.gates ?? 4, configRef.current.c1, configRef.current.c2)
 
-  const inSystem = state.passengers.filter(
-    p => p.state !== 'boarded' && p.state !== 'abandoned',
-  ).length
+    // ticker: aviones y pasajeros se redibujan cada frame
+    scene.app.ticker.add(() => {
+      const s = stateRef.current
+      const c = configRef.current
+      drawPassengers(scene.passengerGfx, s.passengers, c.c1, c.c2)
+      drawPlanes(scene.planeGfx, scene.planeLabelCont, s.planes, s.simTime)
+    })
+
+    return () => {
+      scene.app.ticker.stop()
+      destroyPixiScene(scene)
+      sceneRef.current = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // redibujar fondo si cambia el número de puertas
+  useEffect(() => {
+    const scene = sceneRef.current
+    if (!scene) return
+    drawBackground(scene.bgGfx, scene.labelContainer, config.gates ?? 4, config.c1, config.c2)
+  }, [config.gates, config.c1, config.c2])
+
+  const inSystem   = state.passengers.filter(p => p.state !== 'boarded' && p.state !== 'abandoned').length
+  const boarded    = state.passengers.filter(p => p.state === 'boarded').length
+  const abandoned  = state.passengers.filter(p => p.state === 'abandoned').length
+  const activePlan = state.planes.filter(p => !['airborne', 'cancelled'].includes(p.state)).length
+
+  const rhoLevel = classifyRho(state.metrics.rho)
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden select-none">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="shrink-0 flex items-center justify-between px-5 py-2 bg-gray-900 border-b border-gray-800">
-        <div className="flex items-center gap-3">
+      <header className="shrink-0 flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-800">
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowControls(v => !v)}
+            title={showControls ? 'Ocultar parámetros' : 'Mostrar parámetros'}
+            className="text-xs px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 font-mono transition-colors"
+          >
+            {showControls ? '◀' : '▶'}
+          </button>
           <span className="text-lg">✈</span>
           <h1 className="font-semibold text-gray-100 text-sm tracking-wide">Airport Simulator</h1>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <span className="font-mono text-sm text-gray-300">
-            t = <span className="text-white">{fmtSimTime(state.simTime)}</span>
+            t = <span className="text-white font-semibold">{fmtSimTime(state.simTime)}</span>
           </span>
+          <div className="flex gap-4 text-xs font-mono text-gray-400">
+            <span>Sistema <b className="text-gray-200">{inSystem}</b></span>
+            <span>Abordados <b className="text-emerald-400">{boarded}</b></span>
+            <span>Abandonados <b className="text-red-400">{abandoned}</b></span>
+            <span>Vuelos activos <b className="text-blue-300">{activePlan}</b></span>
+          </div>
           <span className={`text-xs font-mono px-2 py-0.5 rounded ${
             state.isRunning ? 'bg-emerald-900 text-emerald-400' : 'bg-gray-800 text-gray-500'
           }`}>
@@ -68,108 +120,97 @@ export default function App() {
           </span>
         </div>
 
-        <ToggleModules config={config} onConfigChange={handleConfigChange} />
+        <div className="flex items-center gap-2">
+          <ToggleModules config={config} onConfigChange={handleConfigChange} />
+          <button
+            onClick={() => setShowMetrics(v => !v)}
+            title={showMetrics ? 'Ocultar métricas' : 'Mostrar métricas'}
+            className="text-xs px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 font-mono transition-colors"
+          >
+            {showMetrics ? '▶' : '◀'}
+          </button>
+        </div>
       </header>
 
       {/* ── Main ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left: controls */}
-        <ControlPanel
-          config={config}
-          isRunning={state.isRunning}
-          onConfigChange={handleConfigChange}
-          onPlay={play}
-          onPause={pause}
-          onReset={reset}
-          onStep={step}
-        />
-
-        {/* Center: canvas */}
-        <main className="flex-1 flex flex-col items-center justify-center gap-2 bg-gray-950 overflow-hidden p-3">
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_W}
-            height={CANVAS_H}
-            className="rounded-lg border border-gray-800 max-w-full"
-            style={{ imageRendering: 'pixelated' }}
+        {/* Izquierda: controles (colapsable) */}
+        <div
+          className="shrink-0 overflow-hidden transition-all duration-200"
+          style={{ width: showControls ? '288px' : '0' }}
+        >
+          <ControlPanel
+            config={config}
+            isRunning={state.isRunning}
+            onConfigChange={handleConfigChange}
+            onPlay={play}
+            onPause={pause}
+            onReset={reset}
+            onStep={step}
           />
+        </div>
 
-          {/* Contadores rápidos bajo el canvas */}
-          <div className="flex gap-6 text-xs text-gray-500 font-mono">
-            <span>En sistema: <b className="text-gray-300">{inSystem}</b></span>
-            <span>Abordados: <b className="text-emerald-400">{
-              state.passengers.filter(p => p.state === 'boarded').length
-            }</b></span>
-            <span>Abandonados: <b className="text-red-400">{
-              state.passengers.filter(p => p.state === 'abandoned').length
-            }</b></span>
-            <span>Vuelos: <b className="text-gray-300">{state.planes.length}</b></span>
-          </div>
+        {/* Centro: contenedor PixiJS con scroll horizontal */}
+        <main className="flex-1 overflow-auto bg-gray-950 p-4">
+          <div
+            ref={mountRef}
+            style={{ width: '1800px', height: '510px', minWidth: '1800px' }}
+          />
         </main>
 
-        {/* Right: metrics */}
-        <aside className="w-64 shrink-0 flex flex-col gap-3 p-4 bg-gray-900 border-l border-gray-800 overflow-y-auto">
-
-          <h2 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest">Métricas</h2>
-
-          <div className="grid grid-cols-2 gap-2">
-            <MetricsCard
-              label="Lq"
-              value={fmtNum(Lq)}
-              unit="pax"
-              sub="Cola media"
-              level={rhoLevel}
-            />
-            <MetricsCard
-              label="Wq"
-              value={fmtNum(Wq, 1)}
-              unit="min"
-              sub="Espera media"
-              level={rhoLevel}
-            />
-            <MetricsCard
-              label="ρ util."
-              value={fmtNum(rho * 100, 0)}
-              unit="%"
-              sub="Utilización"
-              level={rhoLevel}
-            />
-            <MetricsCard
-              label="Abandono"
-              value={fmtNum(abandonRate * 100, 0)}
-              unit="%"
-              sub="Tasa abandono"
-              level={abandonRate > 0.3 ? 'danger' : abandonRate > 0.1 ? 'warn' : 'ok'}
-            />
-          </div>
-
-          <MetricsCard
-            label="Throughput"
-            value={fmtNum(throughput, 2)}
-            unit="pax/min"
-            sub="Abordados/minuto"
-            level="neutral"
-          />
-
-          <div className="mt-1">
-            <h2 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-2">
-              Evolución Lq · ρ · Wq
-            </h2>
+        {/* Derecha: métricas (colapsable) */}
+        <div
+          className="shrink-0 overflow-hidden transition-all duration-200"
+          style={{ width: showMetrics ? '272px' : '0' }}
+        >
+          <aside className="w-[272px] h-full bg-gray-900 border-l border-gray-800 flex flex-col gap-3 p-3 overflow-y-auto">
+            <p className="text-xs font-mono text-gray-500 uppercase tracking-wider">Métricas de cola</p>
+            <div className="grid grid-cols-2 gap-2">
+              <MetricsCard
+                label="ρ carga"
+                value={fmtNum(state.metrics.rho, 3)}
+                level={rhoLevel}
+              />
+              <MetricsCard
+                label="Lq pasajeros"
+                value={fmtNum(state.metrics.Lq, 2)}
+                unit="pax"
+                level={rhoLevel}
+              />
+              <MetricsCard
+                label="Wq espera"
+                value={fmtNum(state.metrics.Wq, 2)}
+                unit="min"
+                level={rhoLevel}
+              />
+              <MetricsCard
+                label="Throughput"
+                value={fmtNum(state.metrics.throughput, 2)}
+                unit="/min"
+                level="neutral"
+              />
+              <MetricsCard
+                label="Abandono"
+                value={fmtNum(state.metrics.abandonRate * 100, 1)}
+                unit="%"
+                level={
+                  state.metrics.abandonRate > 0.15 ? 'danger'
+                  : state.metrics.abandonRate > 0.05 ? 'warn'
+                  : 'ok'
+                }
+              />
+              <MetricsCard
+                label="L sistema"
+                value={fmtNum(state.metrics.littleL, 2)}
+                unit="pax"
+                level="neutral"
+              />
+            </div>
             <QueueChart history={history} />
-          </div>
+          </aside>
+        </div>
 
-          {/* Erlang C reference */}
-          <div className="mt-1 p-2 bg-gray-800 rounded text-xs text-gray-500 font-mono space-y-0.5">
-            <div className="text-gray-400 font-semibold mb-1">Erlang C (ref)</div>
-            <div>λ = {config.lambda.toFixed(1)}/min</div>
-            <div>c₁={config.c1}  μ₁={config.mu1.toFixed(1)}</div>
-            <div>ρ₁ = {fmtNum(config.lambda / (config.c1 * config.mu1), 3)}</div>
-            <div>c₂={config.c2}  μ₂={config.mu2.toFixed(1)}</div>
-            <div>ρ₂ = {fmtNum(config.lambda / (config.c2 * config.mu2), 3)}</div>
-          </div>
-
-        </aside>
       </div>
     </div>
   )

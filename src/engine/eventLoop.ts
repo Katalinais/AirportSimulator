@@ -13,6 +13,7 @@ export type EventType =
   | 'SECURITY_DONE'
   | 'BOARDING_DONE'
   | 'FLIGHT_DEPART'
+  | 'PLANE_ARRIVE'
   | 'PASSENGER_ABANDON'
   | 'WEATHER_EVENT'
   | 'ACCIDENT_EVENT'
@@ -165,8 +166,7 @@ export class EventLoop {
   // ── API pública ──────────────────────────────────────────────────────────
 
   tick(dt: number): SimState {
-    const simDt      = dt * this.#config.speed
-    const targetTime = this.#currentTime + simDt
+    const targetTime = this.#currentTime + dt
 
     // Procesar todos los eventos discretos hasta targetTime
     while (this.#heap.size > 0 && this.#heap.peek()!.time <= targetTime) {
@@ -177,7 +177,7 @@ export class EventLoop {
 
     // Avanzar colas continuas (timers de servicio) con el paso completo
     this.#currentTime = targetTime
-    this.#tickQueues(simDt)
+    this.#tickQueues(dt)
 
     return this.getState()
   }
@@ -288,8 +288,10 @@ export class EventLoop {
   #spawnInitialFlights(): void {
     const { gates } = this.#config
     for (let g = 0; g < gates; g++) {
-      const dep  = 30 + g * 20 + Math.random() * 10
+      const dep   = 30 + g * 20 + Math.random() * 10
       const plane = new Plane(g, dep, this.#currentTime)
+      plane.setState('at_gate',  this.#currentTime)
+      plane.setState('boarding', this.#currentTime)
       this.#planes.push(plane)
       this.#schedule('FLIGHT_DEPART', dep, { planeId: plane.id })
     }
@@ -304,6 +306,7 @@ export class EventLoop {
       case 'SECURITY_DONE':       this.#onSecurityDone(event.payload); break
       case 'BOARDING_DONE':       this.#onBoardingDone(event.payload); break
       case 'FLIGHT_DEPART':       this.#onDepart(event.payload);       break
+      case 'PLANE_ARRIVE':        this.#onPlaneArrive(event.payload);  break
       case 'PASSENGER_ABANDON':   this.#onAbandon(event.payload);      break
       case 'WEATHER_EVENT':       this.#onWeather();                   break
       case 'ACCIDENT_EVENT':      this.#onAccident();                  break
@@ -346,17 +349,20 @@ export class EventLoop {
     if (!p || p.state === 'abandoned') return
     p.setState('waiting_gate', this.#currentTime)
 
-    // Asignar puerta con menor carga
-    const gateIdx = this.#leastLoadedGate()
-    const plane   = this.#planes.find(pl => pl.gateId === gateIdx && !pl.isFull())
+    // Buscar puerta con avión disponible y menor carga
+    let gateIdx = this.#leastLoadedGate()
+    const plane = this.#planes.find(
+      pl => pl.gateId === gateIdx && !pl.isFull() && ['at_gate', 'boarding'].includes(pl.state),
+    )
 
     if (!plane) {
-      // No hay vuelo disponible → el pasajero abandona
-      p.setState('abandoned', this.#currentTime)
-      this.#totalAbandoned++
+      // Sin avión ahora — reintentar en 5 min (el vuelo de reemplazo habrá llegado)
+      this.#schedule('SECURITY_DONE', this.#currentTime + 5, { passengerId: p.id })
+      this.#schedule('PASSENGER_ABANDON', this.#currentTime + p.patience, { passengerId: p.id })
       return
     }
 
+    p.gateId = gateIdx
     p.setState('boarding_q', this.#currentTime)
     const accepted = this.#boarding[gateIdx].enqueue(p, this.#currentTime)
     if (!accepted) {
@@ -371,23 +377,21 @@ export class EventLoop {
     const p = this.#findPassenger(payload.passengerId)
     if (!p || p.state === 'abandoned') return
 
-    const plane = this.#planes.find(pl => pl.gateId === payload.gateIdx && !pl.isFull())
+    const plane = this.#planes.find(
+      pl => pl.gateId === payload.gateIdx && !pl.isFull() && ['at_gate', 'boarding'].includes(pl.state),
+    )
     if (!plane) { p.setState('abandoned', this.#currentTime); this.#totalAbandoned++; return }
 
     p.setState('boarding_s', this.#currentTime)
     p.setState('boarded',    this.#currentTime)
     plane.passengersBoarded++
     this.#totalBoarded++
-
-    if (plane.isReady()) {
-      plane.setState('taxiing_out', this.#currentTime)
-      this.#schedule('FLIGHT_DEPART', this.#currentTime + 5, { planeId: plane.id })
-    }
   }
 
   #onDepart(payload: { planeId: number }): void {
     const plane = this.#planes.find(p => p.id === payload.planeId)
     if (!plane) return
+    if (['airborne', 'cancelled'].includes(plane.state)) return
 
     if (Math.random() < this.#config.delayProb) {
       const delay = 5 + Math.random() * 20
@@ -396,9 +400,37 @@ export class EventLoop {
       return
     }
 
-    if (plane.state !== 'taxiing_out') plane.setState('taxiing_out', this.#currentTime)
-    plane.setState('takeoff',  this.#currentTime + 2)
-    plane.setState('airborne', this.#currentTime + 5)
+    plane.setState('taxiing_out', this.#currentTime)
+    plane.setState('airborne',    this.#currentTime)
+
+    // Limpiar aviones terminados que ya no necesitan seguimiento
+    if (this.#planes.length > 200) {
+      const KEEP_RECENT_AIRBORNE = 10
+      const airborne = this.#planes.filter(pl => pl.state === 'airborne')
+      const toRemove = new Set(airborne.slice(0, airborne.length - KEEP_RECENT_AIRBORNE).map(pl => pl.id))
+      this.#planes = this.#planes.filter(pl => !toRemove.has(pl.id))
+    }
+
+    // Spawn vuelo de reemplazo si no hay otro avión activo en esta puerta
+    const activeAtGate = this.#planes.filter(
+      pl => pl.gateId === plane.gateId && !['airborne', 'cancelled'].includes(pl.state),
+    ).length
+    if (activeAtGate === 0) {
+      const nextDep = this.#currentTime + 20 + Math.random() * 20
+      const next    = new Plane(plane.gateId, nextDep, this.#currentTime)
+      // El avión llega por el taxiway primero (approaching), después atraca
+      this.#planes.push(next)
+      this.#schedule('PLANE_ARRIVE',  this.#currentTime + 8,  { planeId: next.id })
+      this.#schedule('FLIGHT_DEPART', nextDep,                 { planeId: next.id })
+    }
+  }
+
+  #onPlaneArrive(payload: { planeId: number }): void {
+    const plane = this.#planes.find(p => p.id === payload.planeId)
+    if (!plane) return
+    if (['airborne', 'cancelled'].includes(plane.state)) return
+    plane.setState('at_gate',  this.#currentTime)
+    plane.setState('boarding', this.#currentTime)
   }
 
   #onAbandon(payload: { passengerId: number }): void {
@@ -553,4 +585,3 @@ function runTest() {
   console.log(`  ✓ Abord + Aban ≤ llegados:    ${loop.totalBoarded + loop.totalAbandoned <= loop.totalArrived}`)
 }
 
-runTest()

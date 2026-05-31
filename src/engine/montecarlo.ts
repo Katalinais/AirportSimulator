@@ -226,4 +226,3 @@ function runTest() {
   console.log(`  Valle 03:00 = 0.3: ${demandCurve(3) === 0.3}`)
 }
 
-runTest()
