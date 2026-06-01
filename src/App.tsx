@@ -25,7 +25,7 @@ export default function App() {
     setConfig(prev => ({ ...prev, ...partial }))
   }, [])
 
-  const { state, play, pause, reset: _reset, step, triggerMechanical, triggerCrash } = useSimulation(config)
+  const { state, play, pause, reset: _reset, step } = useSimulation(config)
   const reset = useCallback(() => {
     clearPassengerVisuals()
     clearPlanePixiVisuals()
@@ -33,6 +33,39 @@ export default function App() {
   }, [_reset])
 
   const history = useMetrics(state)
+
+  // ── Notificaciones de incidentes ──────────────────────────────────────────
+  interface Notif { id: number; kind: 'crash' | 'mechanical' | 'weather'; text: string }
+  const [notifs, setNotifs] = useState<Notif[]>([])
+  const notifCounter = useRef(0)
+
+  const pushNotif = useCallback((kind: Notif['kind'], text: string) => {
+    const id = ++notifCounter.current
+    setNotifs(prev => [...prev, { id, kind, text }])
+    setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 4000)
+  }, [])
+
+  const prevCrashes    = useRef(0)
+  const prevMechanical = useRef(0)
+  const prevWeather    = useRef(0)
+
+  useEffect(() => {
+    if (state.crashes > prevCrashes.current)
+      pushNotif('crash', `💥 Colisión en pista — vuelo cancelado (total: ${state.crashes})`)
+    prevCrashes.current = state.crashes
+  }, [state.crashes, pushNotif])
+
+  useEffect(() => {
+    if (state.mechanical > prevMechanical.current)
+      pushNotif('mechanical', `⚙ Falla mecánica — avión en reparación (total: ${state.mechanical})`)
+    prevMechanical.current = state.mechanical
+  }, [state.mechanical, pushNotif])
+
+  useEffect(() => {
+    if (state.weather > prevWeather.current)
+      pushNotif('weather', `🌩 Clima adverso — todos los vuelos retrasados (total: ${state.weather})`)
+    prevWeather.current = state.weather
+  }, [state.weather, pushNotif])
 
   // ── PixiJS ────────────────────────────────────────────────────────────────
   const mountRef  = useRef<HTMLDivElement>(null)
@@ -88,6 +121,24 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden select-none">
+
+      {/* ── Notificaciones ─────────────────────────────────────────────────── */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col-reverse gap-2 z-50 pointer-events-none items-center">
+        {notifs.map(n => (
+          <div
+            key={n.id}
+            className={`px-4 py-2.5 rounded-lg text-sm font-mono shadow-xl border backdrop-blur-sm whitespace-nowrap ${
+              n.kind === 'crash'
+                ? 'bg-red-950/90 border-red-500/60 text-red-200'
+                : n.kind === 'mechanical'
+                ? 'bg-orange-950/90 border-orange-500/60 text-orange-200'
+                : 'bg-sky-950/90 border-sky-500/60 text-sky-200'
+            }`}
+          >
+            {n.text}
+          </div>
+        ))}
+      </div>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="shrink-0 flex items-center justify-between px-3 py-2 bg-gray-900 border-b border-gray-800">
@@ -149,8 +200,6 @@ export default function App() {
             onPause={pause}
             onReset={reset}
             onStep={step}
-            onTriggerMechanical={triggerMechanical}
-            onTriggerCrash={triggerCrash}
           />
         </div>
 

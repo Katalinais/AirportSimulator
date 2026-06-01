@@ -3,15 +3,13 @@
 import { SimConfig, SigmaLevel } from '../hooks/useSimulation'
 
 interface Props {
-  config:               SimConfig
-  isRunning:            boolean
-  onConfigChange:       (p: Partial<SimConfig>) => void
-  onPlay:               () => void
-  onPause:              () => void
-  onReset:              () => void
-  onStep:               () => void
-  onTriggerMechanical:  () => void
-  onTriggerCrash:       () => void
+  config:         SimConfig
+  isRunning:      boolean
+  onConfigChange: (p: Partial<SimConfig>) => void
+  onPlay:         () => void
+  onPause:        () => void
+  onReset:        () => void
+  onStep:         () => void
 }
 
 function Slider({
@@ -50,7 +48,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const SPEEDS = [0.5, 1, 2, 3, 5] as const
 
-export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPause, onReset, onStep, onTriggerMechanical, onTriggerCrash }: Props) {
+export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPause, onReset, onStep }: Props) {
   return (
     <aside className="w-72 shrink-0 flex flex-col gap-5 p-4 bg-gray-900 border-r border-gray-800 overflow-y-auto">
 
@@ -117,26 +115,14 @@ export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPaus
         </div>
       </section>
 
-      {/* Incidentes */}
-      <section>
-        <h3 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-2">Incidentes</h3>
-        <div className="flex gap-1">
-          <button
-            onClick={onTriggerMechanical}
-            title="Forzar falla mecánica en un avión aleatorio"
-            className="flex-1 py-1.5 rounded text-xs bg-orange-950 hover:bg-orange-900 text-orange-300 transition-colors font-mono"
-          >
-            ⚙ Mecánica
-          </button>
-          <button
-            onClick={onTriggerCrash}
-            title="Forzar colisión en un avión aleatorio"
-            className="flex-1 py-1.5 rounded text-xs bg-red-950 hover:bg-red-900 text-red-300 transition-colors font-mono"
-          >
-            💥 Colisión
-          </button>
-        </div>
-      </section>
+      <Section title="Incidentes">
+        <Slider label="Prob. falla mecánica" value={config.mechanicalProb} min={0} max={0.8} step={0.05} decimals={2}
+          onChange={v => onConfigChange({ mechanicalProb: v })} />
+        <Slider label="Prob. colisión" value={config.crashProb} min={0} max={0.3} step={0.01} decimals={2}
+          onChange={v => onConfigChange({ crashProb: v })} />
+        <Slider label="Prob. clima adverso" value={config.weatherProb} min={0} max={1} step={0.05} decimals={2}
+          onChange={v => onConfigChange({ weatherProb: v })} />
+      </Section>
 
       {/* Acciones */}
       <section className="flex flex-col gap-2 mt-auto pt-4 border-t border-gray-800">

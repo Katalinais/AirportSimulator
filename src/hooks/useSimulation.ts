@@ -26,6 +26,9 @@ export interface SimConfig {
   patienceThreshold:  number
   speed:              number
   abmActive:          boolean
+  mechanicalProb:     number
+  crashProb:          number
+  weatherProb:        number
 }
 
 export interface SimMetrics {
@@ -45,6 +48,7 @@ export interface SimState {
   simTime:     number
   crashes:     number
   mechanical:  number
+  weather:     number
 }
 
 // ── Config inicial ────────────────────────────────────────────────────────────
@@ -64,6 +68,9 @@ export const DEFAULT_CONFIG: SimConfig = {
   patienceThreshold: 8,
   speed:             1,
   abmActive:         false,
+  mechanicalProb:    0.25,
+  crashProb:         0.05,
+  weatherProb:       0.5,
 }
 
 const DT = 1 / 60   // ~1 tick por frame a 60 fps (minutos de simulación por frame)
@@ -84,6 +91,9 @@ function toEngineConfig(cfg: SimConfig) {
     delayProb:         cfg.delayProb,
     patienceThreshold: cfg.patienceThreshold,
     speed:             cfg.speed,
+    mechanicalProb:    cfg.mechanicalProb,
+    crashProb:         cfg.crashProb,
+    weatherProb:       cfg.weatherProb,
   }
 }
 
@@ -130,6 +140,7 @@ export function useSimulation(config: SimConfig) {
     simTime:     0,
     crashes:     0,
     mechanical:  0,
+    weather:     0,
   })
 
   // ── Inicializar motor ────────────────────────────────────────────────────
@@ -148,6 +159,7 @@ export function useSimulation(config: SimConfig) {
     config.c1, config.mu1, config.capacity1,
     config.c2, config.mu2, config.sigmaLevel,
     config.gates, config.delayProb, config.patienceThreshold, config.speed,
+    config.mechanicalProb, config.crashProb, config.weatherProb,
   ])
 
   // ── Función de snapshot: lee el motor y actualiza React state ────────────
@@ -163,6 +175,7 @@ export function useSimulation(config: SimConfig) {
       simTime:    engineState.currentTime,
       crashes:    loop.totalCrashes,
       mechanical: loop.totalMechanical,
+      weather:    loop.totalWeather,
     }))
   }, [])
 
@@ -229,6 +242,7 @@ export function useSimulation(config: SimConfig) {
       simTime:     0,
       crashes:     0,
       mechanical:  0,
+      weather:     0,
     })
   }, [])
 
@@ -247,15 +261,5 @@ export function useSimulation(config: SimConfig) {
     }
   }, [])
 
-  const triggerMechanical = useCallback(() => {
-    loopRef.current?.triggerMechanical()
-    snapshot()
-  }, [snapshot])
-
-  const triggerCrash = useCallback(() => {
-    loopRef.current?.triggerCrash()
-    snapshot()
-  }, [snapshot])
-
-  return { state, play, pause, reset, step, triggerMechanical, triggerCrash }
+  return { state, play, pause, reset, step }
 }

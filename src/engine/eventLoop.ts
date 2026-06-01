@@ -40,6 +40,9 @@ export interface SimConfig {
   delayProb:          number   // probabilidad de retraso por vuelo [0,1]
   patienceThreshold:  number   // minutos máximos de espera (referencia global)
   speed:              number   // multiplicador de velocidad de simulación
+  mechanicalProb:     number   // probabilidad de que la falla mecánica se active [0,1]
+  crashProb:          number   // probabilidad de colisión cuando la pista está ocupada [0,1]
+  weatherProb:        number   // probabilidad de que el clima adverso aplique retrasos [0,1]
 }
 
 export interface SimQueues {
@@ -125,6 +128,9 @@ const DEFAULT_CONFIG: SimConfig = {
   delayProb:         0.1,
   patienceThreshold: 8,
   speed:             1,
+  mechanicalProb:    0.25,
+  crashProb:         0.05,
+  weatherProb:       0.5,
 }
 
 export class EventLoop {
@@ -144,6 +150,7 @@ export class EventLoop {
   #totalAbandoned:  number
   #totalCrashes:    number
   #totalMechanical: number
+  #totalWeather:    number
 
   // Estado de la pista
   #runwayBusy: boolean
@@ -159,6 +166,7 @@ export class EventLoop {
     this.#totalAbandoned  = 0
     this.#totalCrashes    = 0
     this.#totalMechanical = 0
+    this.#totalWeather    = 0
     this.#runwayBusy      = false
 
     this.#poisson  = new PoissonGenerator(this.#config.lambda)
@@ -230,6 +238,7 @@ export class EventLoop {
     this.#totalAbandoned  = 0
     this.#totalCrashes    = 0
     this.#totalMechanical = 0
+    this.#totalWeather    = 0
     this.#runwayBusy      = false
     this.#poisson.reset()
     this.#checkin.reset()
@@ -267,17 +276,7 @@ export class EventLoop {
   get totalAbandoned():  number { return this.#totalAbandoned  }
   get totalCrashes():    number { return this.#totalCrashes    }
   get totalMechanical(): number { return this.#totalMechanical }
-
-  triggerMechanical(): void { this.#onMechanical() }
-
-  triggerCrash(): void {
-    const candidates = this.#planes.filter(
-      pl => !(['airborne', 'cancelled', 'crashed', 'mechanical'] as string[]).includes(pl.state),
-    )
-    if (candidates.length === 0) return
-    const plane = candidates[Math.floor(Math.random() * candidates.length)]
-    this.#onCollision(plane)
-  }
+  get totalWeather():    number { return this.#totalWeather    }
 
   // ── Constructores de colas ───────────────────────────────────────────────
 
@@ -461,7 +460,7 @@ export class EventLoop {
       return
     }
 
-    if (this.#runwayBusy && Math.random() < 0.07) {
+    if (this.#runwayBusy && Math.random() < this.#config.crashProb) {
       this.#onCollision(plane)
       return
     }
@@ -519,11 +518,13 @@ export class EventLoop {
 
   #onWeather(payload?: { clearRunway?: boolean }): void {
     if (payload?.clearRunway) { this.#runwayBusy = false; return }
-    // Retraso aleatorio a todos los vuelos activos
-    for (const plane of this.#planes) {
-      if (!['airborne', 'cancelled', 'crashed'].includes(plane.state)) {
-        plane.addDelay(5 + Math.random() * 15)
+    if (Math.random() < this.#config.weatherProb) {
+      for (const plane of this.#planes) {
+        if (!['airborne', 'cancelled', 'crashed'].includes(plane.state)) {
+          plane.addDelay(5 + Math.random() * 15)
+        }
       }
+      this.#totalWeather++
     }
     this.#schedule('WEATHER_EVENT', this.#currentTime + 60 + Math.random() * 30)
   }
@@ -569,10 +570,18 @@ export class EventLoop {
   }
 
   #onMechanical(): void {
+    if (Math.random() >= this.#config.mechanicalProb) {
+      this.#schedule('MECHANICAL_EVENT', this.#currentTime + 80 + Math.random() * 40)
+      return
+    }
+
     const candidates = this.#planes.filter(
       pl => (['at_gate', 'boarding', 'delayed'] as string[]).includes(pl.state),
     )
-    if (candidates.length === 0) return
+    if (candidates.length === 0) {
+      this.#schedule('MECHANICAL_EVENT', this.#currentTime + 80 + Math.random() * 40)
+      return
+    }
 
     const plane = candidates[Math.floor(Math.random() * candidates.length)]
     plane.setState('mechanical', this.#currentTime)
