@@ -44,7 +44,7 @@ export class Passenger {
   readonly id: number
   readonly type: PassengerType
   readonly flightId: number
-  readonly patience: number          // minutos; misma unidad que currentTime
+  patience: number                   // minutos; misma unidad que currentTime
   state: PassengerState
   gateId: number                     // puerta asignada al embarque (-1 = sin asignar)
   position: { x: number; y: number }
@@ -57,7 +57,9 @@ export class Passenger {
     this.id = ++Passenger.#counter
     this.type = type
     this.flightId = flightId
-    this.patience = 3 + Math.random() * 7   // [3, 10] minutos
+    this.patience = type === 'vip'
+      ? 8 + Math.random() * 7              // VIP: [8, 15] minutos
+      : 3 + Math.random() * 7              // standard: [3, 10] minutos
     this.state = 'arriving'
     this.gateId = -1
     this.position = { x: 0, y: 0 }

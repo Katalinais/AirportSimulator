@@ -8,6 +8,7 @@ import {
   SECURITY_QX0, SECURITY_QW,
   CORRIDOR_Y, CORRIDOR_H,
   APRON_Y, TAXIWAY_Y, RUNWAY_Y,
+  TERMINAL_BOTTOM,
   GATE_POS,
   checkinLaneX, securityLaneX,
 } from './pixiApp'
@@ -179,28 +180,32 @@ function drawScanner(g: PIXI.Graphics, cont: PIXI.Container, cx: number, num: nu
 }
 
 // ── Puerta de embarque ────────────────────────────────────────────────────────
+// El jetway cuelga desde la parte superior del terminal (GATE_TOP_Y) hasta
+// donde el avión conecta (GATE_BOT_Y = GATE_POS.y).
+const GATE_TOP_Y = APRON_Y + 18   // 66 — inicio del terminal en la zona de puertas
+const GATE_BOT_Y = 118            // coincide con GATE_POS.y
 
 function drawGate(g: PIXI.Graphics, cont: PIXI.Container, gx: number, label: string): void {
-  const w = 48, h = 65
+  const w = 48, h = GATE_BOT_Y - GATE_TOP_Y   // 52 px
   // cuerpo del jetway
   g.beginFill(0x14532d); g.lineStyle(1.5, 0x16a34a)
-  g.drawRoundedRect(gx - w / 2, 13, w, h, 4); g.endFill()
+  g.drawRoundedRect(gx - w / 2, GATE_TOP_Y, w, h, 4); g.endFill()
   // ventana del jetway
   g.beginFill(0x0f1a1f); g.lineStyle(0.8, 0x4ade80, 0.5)
-  g.drawRoundedRect(gx - 14, 20, 28, 18, 3); g.endFill()
+  g.drawRoundedRect(gx - 14, GATE_TOP_Y + 7, 28, 16, 3); g.endFill()
   g.beginFill(0x4ade80, 0.12); g.lineStyle(0)
-  g.drawRect(gx - 12, 22, 10, 7); g.endFill()
-  // manga de conexión
+  g.drawRect(gx - 12, GATE_TOP_Y + 9, 10, 6); g.endFill()
+  // manga de conexión (toca el avión)
   g.lineStyle(1, 0x16a34a, 0.6)
-  g.moveTo(gx, 78); g.lineTo(gx, 82)
+  g.moveTo(gx, GATE_BOT_Y); g.lineTo(gx, GATE_BOT_Y + 4)
   // LED indicador
   g.beginFill(0x22c55e, 0.9); g.lineStyle(0)
-  g.drawCircle(gx + w / 2 - 5, 17, 3); g.endFill()
+  g.drawCircle(gx + w / 2 - 5, GATE_TOP_Y + 4, 3); g.endFill()
   // número de puerta
   const t = new PIXI.Text(label, new PIXI.TextStyle({ fontFamily: 'monospace', fontSize: 13, fontWeight: 'bold', fill: 0x4ade80 }))
-  t.anchor.set(0.5, 0.5); t.x = gx; t.y = 55; cont.addChild(t)
+  t.anchor.set(0.5, 0.5); t.x = gx; t.y = GATE_TOP_Y + h / 2; cont.addChild(t)
   // etiqueta de vuelo simulada
-  lbl(cont, 'FL 00', gx, 86, 0x86efac, 8, 'monospace', 0.5)
+  lbl(cont, 'FL 00', gx, GATE_BOT_Y + 6, 0x86efac, 8, 'monospace', 0.5)
 }
 
 // ── Tablero de salidas ────────────────────────────────────────────────────────
@@ -263,7 +268,9 @@ function drawBoardingLane(g: PIXI.Graphics, gx: number, yTop: number, yBot: numb
 
 // ── Render principal ──────────────────────────────────────────────────────────
 
-const TERMINAL_BOTTOM = CORRIDOR_Y
+// Terminal ocupa desde el borde inferior de la plataforma hasta el corredor
+const TERM_TOP = APRON_Y + 18     // 66 — inicio visible del terminal
+const TERM_BOT = CORRIDOR_Y       // 452
 
 export function drawBackground(
   gfx:   PIXI.Graphics,
@@ -280,119 +287,137 @@ export function drawBackground(
   g.beginFill(0x0f172a); g.lineStyle(0)
   g.drawRect(0, 0, CANVAS_W, CANVAS_H); g.endFill()
 
-  // Terminal
+  // ── PISTA (top) ───────────────────────────────────────────────────────────
+  const RUNWAY_H = TAXIWAY_Y - RUNWAY_Y   // 30 px
+  const midRwy   = RUNWAY_Y + RUNWAY_H / 2
+
+  g.beginFill(0x0d1520); g.lineStyle(2, 0x374151)
+  g.drawRect(0, RUNWAY_Y, CANVAS_W, RUNWAY_H); g.endFill()
+  g.lineStyle(1.5, 0xe5e7eb, 0.6)
+  g.drawRect(4, RUNWAY_Y + 2, CANVAS_W - 8, RUNWAY_H - 4)
+  // línea central discontinua
+  g.lineStyle(2, 0xf3f4f6, 0.5)
+  let rx = 10
+  while (rx < CANVAS_W - 10) {
+    g.moveTo(rx, midRwy); g.lineTo(Math.min(rx + 28, CANVAS_W - 10), midRwy)
+    rx += 44
+  }
+  // marcas umbral
+  g.lineStyle(0); g.beginFill(0xe5e7eb, 0.7)
+  for (let xi = 0; xi < 3; xi++) {
+    g.drawRect(20 + xi * 11, RUNWAY_Y + 3, 7, 10)
+    g.drawRect(CANVAS_W - 27 - xi * 11, RUNWAY_Y + 3, 7, 10)
+  }
+  g.endFill()
+  lbl(cont, 'PISTA / RUNWAY', 20, RUNWAY_Y + 2, 0x6b7280, 8, 'monospace', 0.65, 0)
+  const rwy1 = new PIXI.Text('28L', new PIXI.TextStyle({ fontFamily: 'monospace', fontSize: 10, fill: 0xe5e7eb }))
+  rwy1.anchor.set(0.5, 0.5); rwy1.x = 52; rwy1.y = midRwy; rwy1.alpha = 0.4; rwy1.rotation = -Math.PI / 2; cont.addChild(rwy1)
+  const rwy2 = new PIXI.Text('10R', new PIXI.TextStyle({ fontFamily: 'monospace', fontSize: 10, fill: 0xe5e7eb }))
+  rwy2.anchor.set(0.5, 0.5); rwy2.x = CANVAS_W - 52; rwy2.y = midRwy; rwy2.alpha = 0.4; rwy2.rotation = Math.PI / 2; cont.addChild(rwy2)
+
+  // ── TAXIWAY ───────────────────────────────────────────────────────────────
+  g.beginFill(0x161f2e); g.lineStyle(1, 0x1f2937)
+  g.drawRect(0, TAXIWAY_Y, CANVAS_W, APRON_Y - TAXIWAY_Y); g.endFill()
+  g.lineStyle(1.5, 0xeab308, 0.7)
+  let tx = 12
+  while (tx < CANVAS_W - 12) {
+    g.moveTo(tx, TAXIWAY_Y + (APRON_Y - TAXIWAY_Y) / 2)
+    g.lineTo(Math.min(tx + 18, CANVAS_W - 12), TAXIWAY_Y + (APRON_Y - TAXIWAY_Y) / 2)
+    tx += 30
+  }
+  lbl(cont, 'TAXIWAY', 20, TAXIWAY_Y + 2, 0x6b7280, 8, 'monospace', 0.6, 0)
+
+  // ── APRON ────────────────────────────────────────────────────────────────
+  g.beginFill(0x161f2e, 0.6); g.lineStyle(1, 0x1f2937, 0.5)
+  g.drawRect(0, APRON_Y, CANVAS_W, TERM_TOP - APRON_Y); g.endFill()
+
+  // ── Terminal (fondo) ──────────────────────────────────────────────────────
   g.beginFill(0x0c1425); g.lineStyle(2, 0x374151)
-  g.drawRect(10, 10, CANVAS_W - 20, TERMINAL_BOTTOM - 10); g.endFill()
+  g.drawRect(10, TERM_TOP, CANVAS_W - 20, TERM_BOT - TERM_TOP); g.endFill()
+
+  // Las colas (check-in y seguridad) van desde debajo del header hasta los
+  // mostradores en la parte INFERIOR del terminal.
+  const qTop = TERM_TOP + 28   // 94 — debajo del header de cada sección
+  const qBot = TERM_BOT - 34   // 418 — sobre los mostradores
 
   // ╔══════════════════════════════════════════╗
   // ║  ZONA CHECK-IN                            ║
   // ╚══════════════════════════════════════════╝
   g.beginFill(0x1e3a5f, 0.14); g.lineStyle(0)
-  g.drawRect(CHECKIN_X, 10, CHECKIN_W, TERMINAL_BOTTOM - 10); g.endFill()
-
-  // Header con gradiente
+  g.drawRect(CHECKIN_X, TERM_TOP, CHECKIN_W, TERM_BOT - TERM_TOP); g.endFill()
   g.beginFill(0x1e3a5f, 0.7); g.lineStyle(0)
-  g.drawRect(CHECKIN_X, 10, CHECKIN_W, 26); g.endFill()
+  g.drawRect(CHECKIN_X, TERM_TOP, CHECKIN_W, 26); g.endFill()
   g.lineStyle(1, 0x3b82f6, 0.4)
-  g.moveTo(CHECKIN_X, 36); g.lineTo(CHECKIN_X + CHECKIN_W, 36)
-
-  lbl(cont, '✈  CHECK-IN', CHECKIN_X + CHECKIN_W / 2, 14, 0x93c5fd, 12, 'sans-serif', 0.95)
-
-  // Tiles del suelo
-  floorTiles(g, CHECKIN_X + 5, 38, CHECKIN_W - 10, TERMINAL_BOTTOM - 50, 0x3b82f6)
-
-  // ── Carriles de fila ────────────────────────────────────────────────────────
-  const qTop = 55, qBot = TERMINAL_BOTTOM - 34
+  g.moveTo(CHECKIN_X, TERM_TOP + 26); g.lineTo(CHECKIN_X + CHECKIN_W, TERM_TOP + 26)
+  lbl(cont, '✈  CHECK-IN', CHECKIN_X + CHECKIN_W / 2, TERM_TOP + 4, 0x93c5fd, 12, 'sans-serif', 0.95)
+  floorTiles(g, CHECKIN_X + 5, TERM_TOP + 28, CHECKIN_W - 10, TERM_BOT - TERM_TOP - 40, 0x3b82f6)
   drawQueueLanes(g, cont, CHECKIN_QX0, CHECKIN_QW, c1, qTop, qBot, 0x3b82f6)
-
-  // ── Mostradores ─────────────────────────────────────────────────────────────
-  for (let i = 0; i < c1; i++) {
-    const cx = checkinLaneX(i, c1)
-    drawCheckinCounter(g, cont, cx, i + 1)
-  }
+  for (let i = 0; i < c1; i++) drawCheckinCounter(g, cont, checkinLaneX(i, c1), i + 1)
 
   // ── Separador 1 ─────────────────────────────────────────────────────────────
   g.beginFill(0x0f172a); g.lineStyle(0)
-  g.drawRect(CHECKIN_X + CHECKIN_W, 10, SECURITY_X - (CHECKIN_X + CHECKIN_W), TERMINAL_BOTTOM - 10); g.endFill()
+  g.drawRect(CHECKIN_X + CHECKIN_W, TERM_TOP, SECURITY_X - CHECKIN_X - CHECKIN_W, TERM_BOT - TERM_TOP); g.endFill()
   g.lineStyle(1.5, 0x374151, 0.6)
-  g.moveTo(CHECKIN_X + CHECKIN_W, 10); g.lineTo(CHECKIN_X + CHECKIN_W, TERMINAL_BOTTOM)
-  g.moveTo(SECURITY_X, 10); g.lineTo(SECURITY_X, TERMINAL_BOTTOM)
+  g.moveTo(CHECKIN_X + CHECKIN_W, TERM_TOP); g.lineTo(CHECKIN_X + CHECKIN_W, TERM_BOT)
+  g.moveTo(SECURITY_X, TERM_TOP); g.lineTo(SECURITY_X, TERM_BOT)
 
   // ╔══════════════════════════════════════════╗
   // ║  ZONA SEGURIDAD                           ║
   // ╚══════════════════════════════════════════╝
   g.beginFill(0x3b1a1a, 0.14); g.lineStyle(0)
-  g.drawRect(SECURITY_X, 10, SECURITY_W, TERMINAL_BOTTOM - 10); g.endFill()
-
+  g.drawRect(SECURITY_X, TERM_TOP, SECURITY_W, TERM_BOT - TERM_TOP); g.endFill()
   g.beginFill(0x3b1a1a, 0.7); g.lineStyle(0)
-  g.drawRect(SECURITY_X, 10, SECURITY_W, 26); g.endFill()
+  g.drawRect(SECURITY_X, TERM_TOP, SECURITY_W, 26); g.endFill()
   g.lineStyle(1, 0xdc2626, 0.35)
-  g.moveTo(SECURITY_X, 36); g.lineTo(SECURITY_X + SECURITY_W, 36)
-
-  lbl(cont, '🛡  SEGURIDAD', SECURITY_X + SECURITY_W / 2, 14, 0xfca5a5, 12, 'sans-serif', 0.95)
-
-  floorTiles(g, SECURITY_X + 5, 38, SECURITY_W - 10, TERMINAL_BOTTOM - 50, 0xef4444)
-
-  // Carriles de seguridad
+  g.moveTo(SECURITY_X, TERM_TOP + 26); g.lineTo(SECURITY_X + SECURITY_W, TERM_TOP + 26)
+  lbl(cont, '🛡  SEGURIDAD', SECURITY_X + SECURITY_W / 2, TERM_TOP + 4, 0xfca5a5, 12, 'sans-serif', 0.95)
+  floorTiles(g, SECURITY_X + 5, TERM_TOP + 28, SECURITY_W - 10, TERM_BOT - TERM_TOP - 40, 0xef4444)
   drawQueueLanes(g, cont, SECURITY_QX0, SECURITY_QW, c2, qTop, qBot, 0xef4444)
-
-  // Escáneres
-  for (let i = 0; i < c2; i++) {
-    const cx = securityLaneX(i, c2)
-    drawScanner(g, cont, cx, i + 1)
-  }
+  for (let i = 0; i < c2; i++) drawScanner(g, cont, securityLaneX(i, c2), i + 1)
 
   // ── Separador 2 ─────────────────────────────────────────────────────────────
   g.beginFill(0x0f172a); g.lineStyle(0)
-  g.drawRect(SECURITY_X + SECURITY_W, 10, GATES_X - (SECURITY_X + SECURITY_W), TERMINAL_BOTTOM - 10); g.endFill()
+  g.drawRect(SECURITY_X + SECURITY_W, TERM_TOP, GATES_X - SECURITY_X - SECURITY_W, TERM_BOT - TERM_TOP); g.endFill()
   g.lineStyle(1.5, 0x374151, 0.6)
-  g.moveTo(SECURITY_X + SECURITY_W, 10); g.lineTo(SECURITY_X + SECURITY_W, TERMINAL_BOTTOM)
-  g.moveTo(GATES_X, 10); g.lineTo(GATES_X, TERMINAL_BOTTOM)
+  g.moveTo(SECURITY_X + SECURITY_W, TERM_TOP); g.lineTo(SECURITY_X + SECURITY_W, TERM_BOT)
+  g.moveTo(GATES_X, TERM_TOP); g.lineTo(GATES_X, TERM_BOT)
 
   // ╔══════════════════════════════════════════╗
   // ║  ZONA PUERTAS / EMBARQUE                  ║
   // ╚══════════════════════════════════════════╝
   g.beginFill(0x052e16, 0.15); g.lineStyle(0)
-  g.drawRect(GATES_X, 10, GATES_W, TERMINAL_BOTTOM - 10); g.endFill()
-
+  g.drawRect(GATES_X, TERM_TOP, GATES_W, TERM_BOT - TERM_TOP); g.endFill()
   g.beginFill(0x14532d, 0.7); g.lineStyle(0)
-  g.drawRect(GATES_X, 10, GATES_W, 26); g.endFill()
+  g.drawRect(GATES_X, TERM_TOP, GATES_W, 26); g.endFill()
   g.lineStyle(1, 0x22c55e, 0.35)
-  g.moveTo(GATES_X, 36); g.lineTo(GATES_X + GATES_W, 36)
+  g.moveTo(GATES_X, TERM_TOP + 26); g.lineTo(GATES_X + GATES_W, TERM_TOP + 26)
+  lbl(cont, '🛫  PUERTAS / EMBARQUE', GATES_X + GATES_W / 2, TERM_TOP + 4, 0x86efac, 12, 'sans-serif', 0.95)
+  floorTiles(g, GATES_X + 5, TERM_TOP + 28, GATES_W - 10, TERM_BOT - TERM_TOP - 40, 0x22c55e)
 
-  lbl(cont, '🛫  PUERTAS / EMBARQUE', GATES_X + GATES_W / 2, 14, 0x86efac, 12, 'sans-serif', 0.95)
+  // Tablero de salidas (justo debajo del header de la zona)
+  drawDepartureBoard(g, cont, GATES_X + GATES_W / 2, TERM_TOP + 28, GATES_W - 40)
 
-  floorTiles(g, GATES_X + 5, 38, GATES_W - 10, TERMINAL_BOTTOM - 50, 0x22c55e)
-
-  // Tablero de salidas
-  drawDepartureBoard(g, cont, GATES_X + GATES_W / 2, 38, GATES_W - 40)
-
-  // Puertas
+  // Puertas (jetways cuelgan desde GATE_TOP_Y hacia abajo)
   const numGates = Math.min(gates, GATE_POS.length)
-  for (let i = 0; i < numGates; i++) {
-    drawGate(g, cont, GATE_POS[i].x, `G${i + 1}`)
-  }
+  for (let i = 0; i < numGates; i++) drawGate(g, cont, GATE_POS[i].x, `G${i + 1}`)
 
-  // Sub-zona cola de embarque (y=98 a 210)
+  // Sub-zona cola de embarque: desde GATE_BOT_Y hasta BOARD_BOT
+  const BOARD_BOT = 248
   g.lineStyle(1, 0x22c55e, 0.2)
-  g.moveTo(GATES_X, 98); g.lineTo(GATES_X + GATES_W, 98)
+  g.moveTo(GATES_X, GATE_BOT_Y); g.lineTo(GATES_X + GATES_W, GATE_BOT_Y)
   g.beginFill(0x14532d, 0.07); g.lineStyle(0)
-  g.drawRect(GATES_X, 98, GATES_W, 115); g.endFill()
-
-  // Carriles de embarque por puerta
-  for (let i = 0; i < numGates; i++) {
-    drawBoardingLane(g, GATE_POS[i].x, 98, 213)
-  }
+  g.drawRect(GATES_X, GATE_BOT_Y, GATES_W, BOARD_BOT - GATE_BOT_Y); g.endFill()
+  for (let i = 0; i < numGates; i++) drawBoardingLane(g, GATE_POS[i].x, GATE_BOT_Y, BOARD_BOT)
 
   // Separador sala de espera
   g.lineStyle(1, 0x22c55e, 0.2)
-  g.moveTo(GATES_X, 213); g.lineTo(GATES_X + GATES_W, 213)
-  lbl(cont, 'SALA DE ESPERA', GATES_X + GATES_W / 2, 218, 0x4ade80, 9, 'monospace', 0.5)
+  g.moveTo(GATES_X, BOARD_BOT); g.lineTo(GATES_X + GATES_W, BOARD_BOT)
+  lbl(cont, 'SALA DE ESPERA', GATES_X + GATES_W / 2, BOARD_BOT + 4, 0x4ade80, 9, 'monospace', 0.5)
 
-  // Sillas en la sala de espera (cols * rows, con espaciado)
-  drawChairs(g, GATES_X + 25, 240, 9, 4, 72, 32)
+  // Sillas en la sala de espera — 10 cols × 6 filas, paso vertical 26 px
+  drawChairs(g, GATES_X + 20, BOARD_BOT + 20, 10, 6, 65, 26)
 
-  // ── CORREDOR SALIDAS ─────────────────────────────────────────────────────────
+  // ── CORREDOR SALIDAS (fondo del terminal) ─────────────────────────────────
   g.beginFill(0x1e3764, 0.55); g.lineStyle(0)
   g.drawRect(10, CORRIDOR_Y, CANVAS_W - 20, CORRIDOR_H); g.endFill()
   g.beginFill(0xfbbf24, 0.12); g.lineStyle(0)
@@ -401,55 +426,14 @@ export function drawBackground(
   g.lineStyle(1, 0x60a5fa, 0.3)
   g.moveTo(10, CORRIDOR_Y); g.lineTo(CANVAS_W - 10, CORRIDOR_Y)
   g.moveTo(10, CORRIDOR_Y + CORRIDOR_H); g.lineTo(CANVAS_W - 10, CORRIDOR_Y + CORRIDOR_H)
-
   for (let fx = 100; fx < CANVAS_W - 50; fx += 130) {
     const arrow = new PIXI.Text('›', new PIXI.TextStyle({ fontFamily: 'sans-serif', fontSize: 15, fontWeight: 'bold', fill: 0x60a5fa }))
-    arrow.alpha = 0.45; arrow.anchor.set(0.5, 0.5); arrow.x = fx; arrow.y = CORRIDOR_Y + CORRIDOR_H / 2
+    arrow.alpha = 0.4; arrow.anchor.set(0.5, 0.5); arrow.x = fx; arrow.y = CORRIDOR_Y + CORRIDOR_H / 2
     cont.addChild(arrow)
   }
   lbl(cont, 'CORREDOR SALIDAS', 22, CORRIDOR_Y + 4, 0x94a3b8, 8, 'monospace', 0.55, 0)
 
-  // ── APRON + TAXIWAY ──────────────────────────────────────────────────────────
-  g.beginFill(0x161f2e); g.lineStyle(1, 0x1f2937)
-  g.drawRect(10, APRON_Y, CANVAS_W - 20, TAXIWAY_Y - APRON_Y + 20); g.endFill()
-
-  // Taxiway línea discontinua
-  g.lineStyle(1.5, 0xeab308)
-  let tx = 12
-  while (tx < CANVAS_W - 12) {
-    g.moveTo(tx, TAXIWAY_Y); g.lineTo(Math.min(tx + 18, CANVAS_W - 12), TAXIWAY_Y)
-    tx += 30
-  }
-  lbl(cont, 'TAXIWAY', 18, APRON_Y + 4, 0x6b7280, 9, 'monospace', 0.65, 0)
-
-  // ── PISTA ─────────────────────────────────────────────────────────────────────
-  g.beginFill(0x0d1520); g.lineStyle(2, 0x374151)
-  g.drawRect(10, RUNWAY_Y, CANVAS_W - 20, CANVAS_H - RUNWAY_Y - 6); g.endFill()
-  g.lineStyle(1.5, 0xe5e7eb)
-  g.drawRect(18, RUNWAY_Y + 5, CANVAS_W - 36, CANVAS_H - RUNWAY_Y - 14)
-  // línea central discontinua
-  g.lineStyle(2, 0xf3f4f6)
-  let rx = 18
-  const midY = RUNWAY_Y + (CANVAS_H - RUNWAY_Y) / 2
-  while (rx < CANVAS_W - 18) {
-    g.moveTo(rx, midY); g.lineTo(Math.min(rx + 30, CANVAS_W - 18), midY)
-    rx += 48
-  }
-  // marcas de umbral
-  g.lineStyle(0); g.beginFill(0xe5e7eb)
-  for (let xi = 0; xi < 4; xi++) {
-    g.drawRect(26 + xi * 12, RUNWAY_Y + 7, 8, 18)
-    g.drawRect(CANVAS_W - 34 - xi * 12, RUNWAY_Y + 7, 8, 18)
-  }
-  g.endFill()
-
-  const rwy1 = new PIXI.Text('28L', new PIXI.TextStyle({ fontFamily: 'monospace', fontSize: 12, fill: 0xe5e7eb }))
-  rwy1.anchor.set(0.5, 0.5); rwy1.x = 58; rwy1.y = midY; rwy1.alpha = 0.45; rwy1.rotation = -Math.PI / 2; cont.addChild(rwy1)
-  const rwy2 = new PIXI.Text('10R', new PIXI.TextStyle({ fontFamily: 'monospace', fontSize: 12, fill: 0xe5e7eb }))
-  rwy2.anchor.set(0.5, 0.5); rwy2.x = CANVAS_W - 58; rwy2.y = midY; rwy2.alpha = 0.45; rwy2.rotation = Math.PI / 2; cont.addChild(rwy2)
-  lbl(cont, 'PISTA / RUNWAY', 18, RUNWAY_Y + 3, 0x6b7280, 9, 'monospace', 0.65, 0)
-
-  // ── LEYENDA ──────────────────────────────────────────────────────────────────
+  // ── LEYENDA (parte inferior libre del canvas) ────────────────────────────
   const legendItems: [number, string][] = [
     [0xfbbf24, 'Check-In'],
     [0xf87171, 'Seguridad'],
@@ -458,14 +442,10 @@ export function drawBackground(
   ]
   legendItems.forEach(([color, label], i) => {
     const lx = 22 + i * 130
-    const ly = CANVAS_H - 18
+    const ly = CANVAS_H - 10
     g.lineStyle(0)
-    g.beginFill(color, 0.9); g.drawCircle(lx, ly - 9, 4); g.endFill()
-    g.beginFill(color, 0.8); g.drawRoundedRect(lx - 4, ly - 5, 8, 7, 2); g.endFill()
-    g.beginFill(0x1e293b, 0.9)
-    g.drawRoundedRect(lx - 2.5, ly + 2, 2.2, 5, 0.8)
-    g.drawRoundedRect(lx + 0.8, ly + 2, 2.2, 5, 0.8); g.endFill()
+    g.beginFill(color, 0.9); g.drawCircle(lx, ly - 6, 4); g.endFill()
     const lt = new PIXI.Text(label, new PIXI.TextStyle({ fontFamily: 'sans-serif', fontSize: 9, fill: 0x9ca3af }))
-    lt.x = lx + 9; lt.y = ly - 5; cont.addChild(lt)
+    lt.x = lx + 9; lt.y = ly - 11; cont.addChild(lt)
   })
 }

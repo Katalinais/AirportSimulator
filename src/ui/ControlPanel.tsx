@@ -3,13 +3,15 @@
 import { SimConfig, SigmaLevel } from '../hooks/useSimulation'
 
 interface Props {
-  config:          SimConfig
-  isRunning:       boolean
-  onConfigChange:  (p: Partial<SimConfig>) => void
-  onPlay:          () => void
-  onPause:         () => void
-  onReset:         () => void
-  onStep:          () => void
+  config:               SimConfig
+  isRunning:            boolean
+  onConfigChange:       (p: Partial<SimConfig>) => void
+  onPlay:               () => void
+  onPause:              () => void
+  onReset:              () => void
+  onStep:               () => void
+  onTriggerMechanical:  () => void
+  onTriggerCrash:       () => void
 }
 
 function Slider({
@@ -48,7 +50,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const SPEEDS = [0.5, 1, 2, 3, 5] as const
 
-export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPause, onReset, onStep }: Props) {
+export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPause, onReset, onStep, onTriggerMechanical, onTriggerCrash }: Props) {
   return (
     <aside className="w-72 shrink-0 flex flex-col gap-5 p-4 bg-gray-900 border-r border-gray-800 overflow-y-auto">
 
@@ -112,6 +114,27 @@ export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPaus
               {s}×
             </button>
           ))}
+        </div>
+      </section>
+
+      {/* Incidentes */}
+      <section>
+        <h3 className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest mb-2">Incidentes</h3>
+        <div className="flex gap-1">
+          <button
+            onClick={onTriggerMechanical}
+            title="Forzar falla mecánica en un avión aleatorio"
+            className="flex-1 py-1.5 rounded text-xs bg-orange-950 hover:bg-orange-900 text-orange-300 transition-colors font-mono"
+          >
+            ⚙ Mecánica
+          </button>
+          <button
+            onClick={onTriggerCrash}
+            title="Forzar colisión en un avión aleatorio"
+            className="flex-1 py-1.5 rounded text-xs bg-red-950 hover:bg-red-900 text-red-300 transition-colors font-mono"
+          >
+            💥 Colisión
+          </button>
         </div>
       </section>
 

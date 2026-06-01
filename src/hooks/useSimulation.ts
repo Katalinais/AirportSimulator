@@ -43,6 +43,8 @@ export interface SimState {
   metrics:     SimMetrics
   isRunning:   boolean
   simTime:     number
+  crashes:     number
+  mechanical:  number
 }
 
 // ── Config inicial ────────────────────────────────────────────────────────────
@@ -126,6 +128,8 @@ export function useSimulation(config: SimConfig) {
     metrics:     { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
     isRunning:   false,
     simTime:     0,
+    crashes:     0,
+    mechanical:  0,
   })
 
   // ── Inicializar motor ────────────────────────────────────────────────────
@@ -157,6 +161,8 @@ export function useSimulation(config: SimConfig) {
       planes:     engineState.planes,
       metrics:    computeMetrics(loop, engineState.currentTime),
       simTime:    engineState.currentTime,
+      crashes:    loop.totalCrashes,
+      mechanical: loop.totalMechanical,
     }))
   }, [])
 
@@ -221,6 +227,8 @@ export function useSimulation(config: SimConfig) {
       metrics:     { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
       isRunning:   false,
       simTime:     0,
+      crashes:     0,
+      mechanical:  0,
     })
   }, [])
 
@@ -239,5 +247,15 @@ export function useSimulation(config: SimConfig) {
     }
   }, [])
 
-  return { state, play, pause, reset, step }
+  const triggerMechanical = useCallback(() => {
+    loopRef.current?.triggerMechanical()
+    snapshot()
+  }, [snapshot])
+
+  const triggerCrash = useCallback(() => {
+    loopRef.current?.triggerCrash()
+    snapshot()
+  }, [snapshot])
+
+  return { state, play, pause, reset, step, triggerMechanical, triggerCrash }
 }

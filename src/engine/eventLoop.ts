@@ -1,6 +1,6 @@
 // Bucle de eventos discretos: gestiona la secuencia de llegadas, servicios y transiciones de estado tick a tick
 
-import { Passenger }        from './passenger'
+import { Passenger, PassengerType } from './passenger'
 import { Plane }             from './plane'
 import { Queue, QueueMetrics } from './queue'
 import { PoissonGenerator }  from './poisson'
@@ -17,6 +17,8 @@ export type EventType =
   | 'PASSENGER_ABANDON'
   | 'WEATHER_EVENT'
   | 'ACCIDENT_EVENT'
+  | 'MECHANICAL_EVENT'
+  | 'COLLISION_EVENT'
 
 export interface SimEvent {
   time:    number
@@ -137,9 +139,14 @@ export class EventLoop {
   #currentTime: number
 
   // Estadísticas de alto nivel
-  #totalArrived:   number
-  #totalBoarded:   number
-  #totalAbandoned: number
+  #totalArrived:    number
+  #totalBoarded:    number
+  #totalAbandoned:  number
+  #totalCrashes:    number
+  #totalMechanical: number
+
+  // Estado de la pista
+  #runwayBusy: boolean
 
   constructor(config: Partial<SimConfig> = {}) {
     this.#config = { ...DEFAULT_CONFIG, ...config }
@@ -147,9 +154,12 @@ export class EventLoop {
     this.#currentTime = 0
     this.#passengers  = []
     this.#planes      = []
-    this.#totalArrived   = 0
-    this.#totalBoarded   = 0
-    this.#totalAbandoned = 0
+    this.#totalArrived    = 0
+    this.#totalBoarded    = 0
+    this.#totalAbandoned  = 0
+    this.#totalCrashes    = 0
+    this.#totalMechanical = 0
+    this.#runwayBusy      = false
 
     this.#poisson  = new PoissonGenerator(this.#config.lambda)
     this.#checkin  = this.#makeCheckin()
@@ -161,6 +171,9 @@ export class EventLoop {
     // Programar primera llegada y primeros vuelos
     this.#scheduleNextArrival()
     this.#spawnInitialFlights()
+    this.#schedule('WEATHER_EVENT',    40 + Math.random() * 20)
+    this.#schedule('ACCIDENT_EVENT',   80 + Math.random() * 40)
+    this.#schedule('MECHANICAL_EVENT', 50 + Math.random() * 30)
   }
 
   // ── API pública ──────────────────────────────────────────────────────────
@@ -211,10 +224,13 @@ export class EventLoop {
     this.#heap.clear()
     this.#passengers     = []
     this.#planes         = []
-    this.#currentTime    = 0
-    this.#totalArrived   = 0
-    this.#totalBoarded   = 0
-    this.#totalAbandoned = 0
+    this.#currentTime     = 0
+    this.#totalArrived    = 0
+    this.#totalBoarded    = 0
+    this.#totalAbandoned  = 0
+    this.#totalCrashes    = 0
+    this.#totalMechanical = 0
+    this.#runwayBusy      = false
     this.#poisson.reset()
     this.#checkin.reset()
     this.#security.reset()
@@ -222,6 +238,9 @@ export class EventLoop {
     if (this.#config.peakHour) this.#poisson.setPeak(true)
     this.#scheduleNextArrival()
     this.#spawnInitialFlights()
+    this.#schedule('WEATHER_EVENT',    40 + Math.random() * 20)
+    this.#schedule('ACCIDENT_EVENT',   80 + Math.random() * 40)
+    this.#schedule('MECHANICAL_EVENT', 50 + Math.random() * 30)
   }
 
   getState(): SimState {
@@ -243,9 +262,22 @@ export class EventLoop {
   }
 
   // Acceso rápido a totales para el test
-  get totalArrived():   number { return this.#totalArrived   }
-  get totalBoarded():   number { return this.#totalBoarded   }
-  get totalAbandoned(): number { return this.#totalAbandoned }
+  get totalArrived():    number { return this.#totalArrived    }
+  get totalBoarded():    number { return this.#totalBoarded    }
+  get totalAbandoned():  number { return this.#totalAbandoned  }
+  get totalCrashes():    number { return this.#totalCrashes    }
+  get totalMechanical(): number { return this.#totalMechanical }
+
+  triggerMechanical(): void { this.#onMechanical() }
+
+  triggerCrash(): void {
+    const candidates = this.#planes.filter(
+      pl => !(['airborne', 'cancelled', 'crashed', 'mechanical'] as string[]).includes(pl.state),
+    )
+    if (candidates.length === 0) return
+    const plane = candidates[Math.floor(Math.random() * candidates.length)]
+    this.#onCollision(plane)
+  }
 
   // ── Constructores de colas ───────────────────────────────────────────────
 
@@ -308,13 +340,19 @@ export class EventLoop {
       case 'FLIGHT_DEPART':       this.#onDepart(event.payload);       break
       case 'PLANE_ARRIVE':        this.#onPlaneArrive(event.payload);  break
       case 'PASSENGER_ABANDON':   this.#onAbandon(event.payload);      break
-      case 'WEATHER_EVENT':       this.#onWeather();                   break
-      case 'ACCIDENT_EVENT':      this.#onAccident();                  break
+      case 'WEATHER_EVENT':       this.#onWeather(event.payload);      break
+      case 'ACCIDENT_EVENT':      this.#onAccident(event.payload);     break
+      case 'MECHANICAL_EVENT':    this.#onMechanical();                break
     }
   }
 
   #onArrive(): void {
-    const p = new Passenger('standard', 0, this.#currentTime)
+    const type: PassengerType = Math.random() < 0.15 ? 'vip' : 'standard'
+    const gateIdx = this.#leastLoadedGate()
+    const flightId = this.#planes.find(
+      pl => pl.gateId === gateIdx && (['at_gate', 'boarding'] as string[]).includes(pl.state),
+    )?.id ?? 0
+    const p = new Passenger(type, flightId, this.#currentTime)
     p.setState('checkin_q', this.#currentTime)
     this.#passengers.push(p)
     this.#totalArrived++
@@ -391,13 +429,45 @@ export class EventLoop {
   #onDepart(payload: { planeId: number }): void {
     const plane = this.#planes.find(p => p.id === payload.planeId)
     if (!plane) return
-    if (['airborne', 'cancelled'].includes(plane.state)) return
+    if (['airborne', 'cancelled', 'crashed', 'mechanical'].includes(plane.state)) return
 
     if (Math.random() < this.#config.delayProb) {
       const delay = 5 + Math.random() * 20
       plane.addDelay(delay)
+
+      // a) Notificar pasajeros en puerta afectados
+      for (const p of this.#passengers) {
+        if (p.flightId === plane.id && p.state === 'waiting_gate') {
+          p.patience -= delay * 0.6
+          if (p.patience <= 0) {
+            this.#schedule('PASSENGER_ABANDON', this.#currentTime, { passengerId: p.id })
+          }
+        }
+      }
+
+      // b) Propagación a vuelo adyacente (efecto dominó, un nivel)
+      if (Math.random() < 0.3) {
+        const adjGateId = (plane.gateId + 1) % this.#config.gates
+        const adjPlane  = this.#planes.find(
+          pl => pl.gateId === adjGateId && !(['airborne', 'cancelled', 'crashed'] as string[]).includes(pl.state),
+        )
+        if (adjPlane) {
+          adjPlane.addDelay(delay * 0.4)
+          this.#schedule('FLIGHT_DEPART', this.#currentTime + delay * 0.4, { planeId: adjPlane.id })
+        }
+      }
+
       this.#schedule('FLIGHT_DEPART', this.#currentTime + delay, { planeId: plane.id })
       return
+    }
+
+    if (this.#runwayBusy && Math.random() < 0.07) {
+      this.#onCollision(plane)
+      return
+    }
+    if (!this.#runwayBusy) {
+      this.#runwayBusy = true
+      this.#schedule('PLANE_ARRIVE', this.#currentTime + 6, { freeRunway: true })
     }
 
     plane.setState('taxiing_out', this.#currentTime)
@@ -425,10 +495,11 @@ export class EventLoop {
     }
   }
 
-  #onPlaneArrive(payload: { planeId: number }): void {
+  #onPlaneArrive(payload: { planeId?: number; freeRunway?: boolean }): void {
+    if (payload.freeRunway) { this.#runwayBusy = false; return }
     const plane = this.#planes.find(p => p.id === payload.planeId)
     if (!plane) return
-    if (['airborne', 'cancelled'].includes(plane.state)) return
+    if (['airborne', 'cancelled', 'crashed'].includes(plane.state)) return
     plane.setState('at_gate',  this.#currentTime)
     plane.setState('boarding', this.#currentTime)
   }
@@ -446,21 +517,76 @@ export class EventLoop {
     }
   }
 
-  #onWeather(): void {
+  #onWeather(payload?: { clearRunway?: boolean }): void {
+    if (payload?.clearRunway) { this.#runwayBusy = false; return }
     // Retraso aleatorio a todos los vuelos activos
     for (const plane of this.#planes) {
-      if (!['airborne', 'cancelled'].includes(plane.state)) {
+      if (!['airborne', 'cancelled', 'crashed'].includes(plane.state)) {
         plane.addDelay(5 + Math.random() * 15)
       }
     }
+    this.#schedule('WEATHER_EVENT', this.#currentTime + 60 + Math.random() * 30)
   }
 
-  #onAccident(): void {
+  #onAccident(payload?: { repairPlaneId?: number }): void {
+    if (payload?.repairPlaneId !== undefined) {
+      const plane = this.#planes.find(p => p.id === payload.repairPlaneId)
+      if (plane && plane.state === 'mechanical') {
+        plane.setState('boarding', this.#currentTime)
+      }
+      return
+    }
     // Cierra una puerta de embarque temporalmente (retraso significativo)
     if (this.#planes.length > 0) {
       const idx = Math.floor(Math.random() * this.#planes.length)
       this.#planes[idx].addDelay(20 + Math.random() * 30)
     }
+    this.#schedule('ACCIDENT_EVENT', this.#currentTime + 90 + Math.random() * 60)
+  }
+
+  #onCollision(triggerPlane: Plane): void {
+    const otherPlane = this.#planes.find(p => p.state === 'taxiing_out')
+    if (otherPlane) {
+      otherPlane.setState('crashed', this.#currentTime)
+      otherPlane.crashedAt = this.#currentTime
+    }
+    triggerPlane.setState('crashed', this.#currentTime)
+    triggerPlane.crashedAt = this.#currentTime
+    this.#totalCrashes++
+    this.#runwayBusy = true
+
+    for (const p of this.#passengers) {
+      if (
+        (p.flightId === triggerPlane.id || (otherPlane && p.flightId === otherPlane.id)) &&
+        p.state !== 'boarded' && p.state !== 'abandoned'
+      ) {
+        p.setState('abandoned', this.#currentTime)
+        this.#totalAbandoned++
+      }
+    }
+
+    this.#schedule('WEATHER_EVENT', this.#currentTime + 40 + Math.random() * 20, { clearRunway: true })
+  }
+
+  #onMechanical(): void {
+    const candidates = this.#planes.filter(
+      pl => (['at_gate', 'boarding', 'delayed'] as string[]).includes(pl.state),
+    )
+    if (candidates.length === 0) return
+
+    const plane = candidates[Math.floor(Math.random() * candidates.length)]
+    plane.setState('mechanical', this.#currentTime)
+    plane.addDelay(45 + Math.random() * 45)
+    this.#totalMechanical++
+
+    for (const p of this.#passengers) {
+      if (p.flightId === plane.id && (['boarding_q', 'waiting_gate'] as string[]).includes(p.state)) {
+        p.patience *= 0.5
+      }
+    }
+
+    this.#schedule('ACCIDENT_EVENT',   this.#currentTime + 50 + Math.random() * 40, { repairPlaneId: plane.id })
+    this.#schedule('MECHANICAL_EVENT', this.#currentTime + 80 + Math.random() * 40)
   }
 
   // ── Avance de colas continuas ────────────────────────────────────────────

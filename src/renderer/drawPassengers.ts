@@ -42,7 +42,7 @@ const HAIRS = [0x1a1005, 0x3d2b1f, 0x6b4226, 0xd4a017, 0x4a4a4a, 0x1a1a2e]
 const PANTS = [0x1e293b, 0x374151, 0x1e3a5f, 0x2d1b69, 0x1a2e1a, 0x3b1a1a]
 
 // ── Posiciones ────────────────────────────────────────────────────────────────
-const TERMINAL_BOTTOM = 418
+const TERMINAL_BOTTOM = 452
 const COUNTER_Y = TERMINAL_BOTTOM - 10  // y de los mostradores (pies del pasajero)
 
 function checkinQueuePos(idx: number, c1: number) {
@@ -62,18 +62,18 @@ function securityServerPos(slot: number, c2: number) {
   return { x: securityLaneX(slot % c2, c2), y: COUNTER_Y }
 }
 function waitingAreaPos(idx: number) {
-  const cols = 9
+  const cols = 10
   const col  = idx % cols
-  const row  = Math.floor(idx / cols)
-  return { x: 1095 + col * 72, y: 258 + row * 32 }
+  const row  = Math.min(Math.floor(idx / cols), 5)   // cap at 6 rows
+  return { x: 1095 + col * 65, y: 282 + row * 26 }
 }
 function boardingQueuePos(idx: number, gateId: number) {
   const gx = GATE_POS[Math.min(gateId, GATE_POS.length - 1)].x
-  return { x: gx, y: 140 + idx * 22 }
+  return { x: gx, y: 130 + idx * 22 }
 }
 function boardingServerPos(gateId: number) {
   const gx = GATE_POS[Math.min(gateId, GATE_POS.length - 1)].x
-  return { x: gx, y: 110 }
+  return { x: gx, y: 124 }
 }
 
 function getTarget(

@@ -11,6 +11,8 @@ export type PlaneState =
   | 'airborne'
   | 'delayed'
   | 'cancelled'
+  | 'crashed'
+  | 'mechanical'
 
 interface StateTransition {
   state: PlaneState
@@ -21,7 +23,7 @@ interface StateTransition {
 const GROUND_STATES = new Set<PlaneState>(['at_gate', 'boarding', 'delayed'])
 
 // Estados terminales — no se permiten más transiciones
-const TERMINAL_STATES = new Set<PlaneState>(['airborne', 'cancelled'])
+const TERMINAL_STATES = new Set<PlaneState>(['airborne', 'cancelled', 'crashed'])
 
 export class Plane {
   static #counter = 0
@@ -34,6 +36,7 @@ export class Plane {
   actualDeparture: number
   passengersBoarded: number
   delayMinutes: number
+  crashedAt: number | null
   position: { x: number; y: number }
 
   #history: StateTransition[] = []
@@ -47,6 +50,7 @@ export class Plane {
     this.capacity = Math.floor(80 + Math.random() * 101)   // [80, 180]
     this.passengersBoarded = 0
     this.delayMinutes = 0
+    this.crashedAt = null
     this.position = { x: 0, y: 0 }
     this.#history.push({ state: 'approaching', at: spawnTime })
   }
@@ -75,9 +79,7 @@ export class Plane {
     if (TERMINAL_STATES.has(this.state)) return
     this.delayMinutes += minutes
     this.actualDeparture = this.scheduledDeparture + this.delayMinutes
-    if (!TERMINAL_STATES.has(this.state)) {
-      this.state = 'delayed'
-    }
+    if (this.state !== 'mechanical') this.state = 'delayed'
   }
 
   // Retorna cuántos minutos lleva en el estado actual (requiere currentTime externo)

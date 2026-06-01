@@ -13,21 +13,22 @@ export const GATES_X    = 1070, GATES_W    = 720
 export const CHECKIN_QX0  = 40,  CHECKIN_QW  = 440   // x 40–480
 export const SECURITY_QX0 = 570, SECURITY_QW = 440   // x 570–1010
 
-// ── Coordenadas verticales clave ──────────────────────────────────────────────
-export const TERMINAL_BOTTOM = 418
-export const CORRIDOR_Y      = 418   // pasillo
-export const CORRIDOR_H      = 20
-export const APRON_Y         = 440
-export const TAXIWAY_Y       = 455
-export const RUNWAY_Y        = 478
+// ── Coordenadas verticales clave (pista en la parte SUPERIOR) ─────────────────
+export const RUNWAY_Y        = 0     // pista al tope del canvas
+export const TAXIWAY_Y       = 30    // calle de rodaje
+export const APRON_Y         = 48    // plataforma de espera
 
-// ── Posiciones de puertas (máx 5) ─────────────────────────────────────────────
+export const TERMINAL_BOTTOM = 452
+export const CORRIDOR_Y      = 452   // pasillo al fondo del terminal
+export const CORRIDOR_H      = 18
+
+// ── Posiciones de puertas (máx 5) — justo debajo de la plataforma ─────────────
 export const GATE_POS = [
-  { x: 1142, y: 68 },
-  { x: 1322, y: 68 },
-  { x: 1502, y: 68 },
-  { x: 1682, y: 68 },
-  { x: 1862, y: 68 },
+  { x: 1142, y: 118 },
+  { x: 1322, y: 118 },
+  { x: 1502, y: 118 },
+  { x: 1682, y: 118 },
+  { x: 1862, y: 118 },
 ]
 
 // ── Helpers de posición de cola ────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export interface PixiScene {
   bgGfx:           PIXI.Graphics
   passengerGfx:    PIXI.Graphics
   planeGfx:        PIXI.Graphics
+  crashGfx:        PIXI.Graphics
   planeLabelCont:  PIXI.Container
   labelContainer:  PIXI.Container
 }
@@ -69,6 +71,7 @@ export function initPixiScene(mount: HTMLElement, _gates: number): PixiScene {
   const bgGfx          = new PIXI.Graphics()
   const passengerGfx   = new PIXI.Graphics()
   const planeGfx       = new PIXI.Graphics()
+  const crashGfx       = new PIXI.Graphics()
   const planeLabelCont = new PIXI.Container()
   const labelContainer = new PIXI.Container()
 
@@ -76,9 +79,10 @@ export function initPixiScene(mount: HTMLElement, _gates: number): PixiScene {
   app.stage.addChild(labelContainer)
   app.stage.addChild(passengerGfx)
   app.stage.addChild(planeGfx)
+  app.stage.addChild(crashGfx)
   app.stage.addChild(planeLabelCont)
 
-  return { app, bgGfx, passengerGfx, planeGfx, planeLabelCont, labelContainer }
+  return { app, bgGfx, passengerGfx, planeGfx, crashGfx, planeLabelCont, labelContainer }
 }
 
 export function destroyPixiScene(scene: PixiScene): void {

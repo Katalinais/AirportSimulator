@@ -90,7 +90,16 @@ export class Queue {
   // Retorna false si la sala está llena (capacity superada).
   enqueue(passenger: Passenger, currentTime: number): boolean {
     if (this.waiting.length >= this.config.capacity) return false
-    this.waiting.push(passenger)
+    if (passenger.type === 'vip') {
+      const idx = this.waiting.findIndex(p => p.type === 'standard')
+      if (idx === -1) {
+        this.waiting.push(passenger)
+      } else {
+        this.waiting.splice(idx, 0, passenger)
+      }
+    } else {
+      this.waiting.push(passenger)
+    }
     this.#queueEntryTime.set(passenger.id, currentTime)
     this.#totalArrived++
     return true

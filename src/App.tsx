@@ -25,7 +25,7 @@ export default function App() {
     setConfig(prev => ({ ...prev, ...partial }))
   }, [])
 
-  const { state, play, pause, reset: _reset, step } = useSimulation(config)
+  const { state, play, pause, reset: _reset, step, triggerMechanical, triggerCrash } = useSimulation(config)
   const reset = useCallback(() => {
     clearPassengerVisuals()
     clearPlanePixiVisuals()
@@ -60,7 +60,7 @@ export default function App() {
       const s = stateRef.current
       const c = configRef.current
       drawPassengers(scene.passengerGfx, s.passengers, c.c1, c.c2)
-      drawPlanes(scene.planeGfx, scene.planeLabelCont, s.planes, s.simTime)
+      drawPlanes(scene.planeGfx, scene.planeLabelCont, s.planes, s.simTime, scene.crashGfx)
     })
 
     return () => {
@@ -78,6 +78,7 @@ export default function App() {
     drawBackground(scene.bgGfx, scene.labelContainer, config.gates ?? 4, config.c1, config.c2)
   }, [config.gates, config.c1, config.c2])
 
+  const { crashes, mechanical } = state
   const inSystem   = state.passengers.filter(p => p.state !== 'boarded' && p.state !== 'abandoned').length
   const boarded    = state.passengers.filter(p => p.state === 'boarded').length
   const abandoned  = state.passengers.filter(p => p.state === 'abandoned').length
@@ -148,11 +149,13 @@ export default function App() {
             onPause={pause}
             onReset={reset}
             onStep={step}
+            onTriggerMechanical={triggerMechanical}
+            onTriggerCrash={triggerCrash}
           />
         </div>
 
         {/* Centro: contenedor PixiJS con scroll horizontal */}
-        <main className="flex-1 overflow-auto bg-gray-950 p-4">
+        <main className="flex-1 min-w-0 overflow-auto bg-gray-950 p-4">
           <div
             ref={mountRef}
             style={{ width: '1800px', height: '510px', minWidth: '1800px' }}
@@ -161,10 +164,10 @@ export default function App() {
 
         {/* Derecha: métricas (colapsable) */}
         <div
-          className="shrink-0 overflow-hidden transition-all duration-200"
+          className="shrink-0 relative overflow-hidden transition-all duration-200"
           style={{ width: showMetrics ? '272px' : '0' }}
         >
-          <aside className="w-[272px] h-full bg-gray-900 border-l border-gray-800 flex flex-col gap-3 p-3 overflow-y-auto">
+          <aside className="absolute inset-0 w-[272px] bg-gray-900 border-l border-gray-800 flex flex-col gap-3 p-3 overflow-y-auto">
             <p className="text-xs font-mono text-gray-500 uppercase tracking-wider">Métricas de cola</p>
             <div className="grid grid-cols-2 gap-2">
               <MetricsCard
@@ -205,6 +208,21 @@ export default function App() {
                 value={fmtNum(state.metrics.littleL, 2)}
                 unit="pax"
                 level="neutral"
+              />
+            </div>
+            <p className="text-xs font-mono text-gray-500 uppercase tracking-wider mt-2">
+              Incidentes
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <MetricsCard
+                label="Colisiones"
+                value={String(crashes)}
+                level={crashes > 0 ? 'danger' : 'ok'}
+              />
+              <MetricsCard
+                label="Fallas mec."
+                value={String(mechanical)}
+                level={mechanical > 0 ? 'warn' : 'ok'}
               />
             </div>
             <QueueChart history={history} />

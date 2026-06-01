@@ -13,10 +13,12 @@ interface PlaneVis {
 }
 
 const planeVisuals = new Map<number, PlaneVis>()
+const crashVisuals = new Map<number, { x: number; y: number; startMs: number }>()
 let lastPlaneFrameMs = 0
 
 export function clearPlanePixiVisuals(): void {
   planeVisuals.clear()
+  crashVisuals.clear()
   lastPlaneFrameMs = 0
 }
 
@@ -31,6 +33,8 @@ function planeColor(state: string): number {
     case 'delayed':                                 return 0xfbbf24
     case 'taxiing_out': case 'takeoff': case 'airborne': return 0xf97316
     case 'cancelled':                               return 0xef4444
+    case 'crashed':                                 return 0xff2200
+    case 'mechanical':                              return 0xff6600
     default:                                        return 0x94a3b8
   }
 }
@@ -95,13 +99,13 @@ function drawPlaneIcon(g: PIXI.Graphics, cx: number, cy: number, color: number, 
 function drawHoldZone(g: PIXI.Graphics): void {
   g.beginFill(0x1e283c, 0.6)
   g.lineStyle(1, 0x374151)
-  g.drawRect(16, 328, 510, 14)
+  g.drawRect(HOLD_X0 - HOLD_DX / 2, HOLD_Y - 7, 7 * HOLD_DX, 14)
   g.endFill()
 
   g.lineStyle(0.8, 0x2d3748)
   for (let i = 1; i < 7; i++) {
-    g.moveTo(HOLD_X0 + i * HOLD_DX, 328)
-    g.lineTo(HOLD_X0 + i * HOLD_DX, 342)
+    g.moveTo(HOLD_X0 + i * HOLD_DX, HOLD_Y - 7)
+    g.lineTo(HOLD_X0 + i * HOLD_DX, HOLD_Y + 7)
   }
 }
 
@@ -110,12 +114,14 @@ export function drawPlanes(
   labelCont:  PIXI.Container,
   planes:     Plane[],
   simTime:    number,
+  crashGfx:   PIXI.Graphics,
 ): void {
   const now = performance.now()
   const dt  = Math.min((now - (lastPlaneFrameMs || now)) / 1000, 0.1)
   lastPlaneFrameMs = now
 
   g.clear()
+  crashGfx.clear()
   labelCont.removeChildren()
 
   const LERP = Math.min(1, 6 * dt)
@@ -163,6 +169,10 @@ export function drawPlanes(
       vis.y = gate.y
     }
 
+    if (plane.state === 'crashed' && !crashVisuals.has(plane.id)) {
+      crashVisuals.set(plane.id, { x: vis.x, y: vis.y, startMs: now })
+    }
+
     let tx = gate.x, ty = gate.y, targetAngle = -Math.PI / 2
 
     if (vis.airborneAt !== null) {
@@ -175,7 +185,7 @@ export function drawPlanes(
         const t = elapsed / PHASE_DOWN
         tx = gate.x
         ty = gate.y + t * (TAXIWAY_Y - gate.y)
-        targetAngle = Math.PI / 2
+        targetAngle = -Math.PI / 2
       } else if (elapsed < PHASE_DOWN + PHASE_TAXI) {
         const t = (elapsed - PHASE_DOWN) / PHASE_TAXI
         tx = gate.x + t * (55 - gate.x)
@@ -248,5 +258,49 @@ export function drawPlanes(
       g.drawCircle(vis.x, vis.y - 22, 5)
       g.endFill()
     }
+
+    // badge falla mecánica
+    if (plane.state === 'mechanical') {
+      g.lineStyle(0)
+      g.beginFill(0xf97316, 0.9)
+      g.drawRoundedRect(vis.x - 14, vis.y - 28, 28, 11, 2)
+      g.endFill()
+    }
+  }
+
+  // ── Animaciones de crash ──────────────────────────────────────────────────
+  for (const [id, crash] of crashVisuals) {
+    const elapsed = (now - crash.startMs) / 1000
+    if (elapsed > 12) { crashVisuals.delete(id); continue }
+
+    const alpha = Math.max(0, 1 - elapsed / 12)
+
+    const pulse = 1 + 0.3 * Math.sin(elapsed * 8)
+    crashGfx.beginFill(0xff4400, alpha * 0.35)
+    crashGfx.lineStyle(0)
+    crashGfx.drawCircle(crash.x, crash.y, 28 * pulse)
+    crashGfx.endFill()
+
+    crashGfx.beginFill(0xff8800, alpha * 0.5)
+    crashGfx.drawCircle(crash.x, crash.y, 16 * pulse)
+    crashGfx.endFill()
+
+    crashGfx.beginFill(0xffcc00, alpha * 0.7)
+    crashGfx.drawCircle(crash.x, crash.y, 7)
+    crashGfx.endFill()
+
+    crashGfx.lineStyle(2, 0xff6600, alpha * 0.9)
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2
+      const r1  = 10 + elapsed * 6
+      const r2  = r1 + 8
+      crashGfx.moveTo(crash.x + Math.cos(ang) * r1, crash.y + Math.sin(ang) * r1)
+      crashGfx.lineTo(crash.x + Math.cos(ang) * r2, crash.y + Math.sin(ang) * r2)
+    }
+
+    crashGfx.lineStyle(3, 0x555555, alpha * 0.4)
+    crashGfx.beginFill(0, 0)
+    crashGfx.drawCircle(crash.x, crash.y, 18 + elapsed * 12)
+    crashGfx.endFill()
   }
 }
