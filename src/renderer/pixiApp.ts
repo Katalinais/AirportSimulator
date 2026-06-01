@@ -15,8 +15,8 @@ export const SECURITY_QX0 = 570, SECURITY_QW = 440   // x 570–1010
 
 // ── Coordenadas verticales clave (pista en la parte SUPERIOR) ─────────────────
 export const RUNWAY_Y        = 0     // pista al tope del canvas
-export const TAXIWAY_Y       = 30    // calle de rodaje
-export const APRON_Y         = 48    // plataforma de espera
+export const TAXIWAY_Y       = 55    // calle de rodaje
+export const APRON_Y         = 74    // plataforma de espera
 
 export const TERMINAL_BOTTOM = 452
 export const CORRIDOR_Y      = 452   // pasillo al fondo del terminal
@@ -24,11 +24,11 @@ export const CORRIDOR_H      = 18
 
 // ── Posiciones de puertas (máx 5) — justo debajo de la plataforma ─────────────
 export const GATE_POS = [
-  { x: 1142, y: 118 },
-  { x: 1322, y: 118 },
-  { x: 1502, y: 118 },
-  { x: 1682, y: 118 },
-  { x: 1862, y: 118 },
+  { x: 1142, y: 145 },
+  { x: 1322, y: 145 },
+  { x: 1502, y: 145 },
+  { x: 1682, y: 145 },
+  { x: 1862, y: 145 },
 ]
 
 // ── Helpers de posición de cola ────────────────────────────────────────────────

@@ -65,15 +65,15 @@ function waitingAreaPos(idx: number) {
   const cols = 10
   const col  = idx % cols
   const row  = Math.min(Math.floor(idx / cols), 5)   // cap at 6 rows
-  return { x: 1095 + col * 65, y: 282 + row * 26 }
+  return { x: 1095 + col * 65, y: 309 + row * 26 }
 }
 function boardingQueuePos(idx: number, gateId: number) {
   const gx = GATE_POS[Math.min(gateId, GATE_POS.length - 1)].x
-  return { x: gx, y: 130 + idx * 22 }
+  return { x: gx, y: 157 + idx * 22 }
 }
 function boardingServerPos(gateId: number) {
   const gx = GATE_POS[Math.min(gateId, GATE_POS.length - 1)].x
-  return { x: gx, y: 124 }
+  return { x: gx, y: 151 }
 }
 
 function getTarget(

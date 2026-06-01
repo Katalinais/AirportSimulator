@@ -189,12 +189,12 @@ export function drawPlanes(
       } else if (elapsed < PHASE_DOWN + PHASE_TAXI) {
         const t = (elapsed - PHASE_DOWN) / PHASE_TAXI
         tx = gate.x + t * (55 - gate.x)
-        ty = TAXIWAY_Y
+        ty = TAXIWAY_Y / 2        // desciende al centro de la pista durante el taxi
         targetAngle = Math.PI
       } else if (elapsed < PHASE_DOWN + PHASE_TAXI + PHASE_RWY) {
         const t = (elapsed - PHASE_DOWN - PHASE_TAXI) / PHASE_RWY
         tx = 55 + t * t * (CANVAS_W + 150)
-        ty = RUNWAY_Y
+        ty = TAXIWAY_Y / 2        // se mantiene en el centro de la pista al despegar
         targetAngle = 0
       } else {
         planeVisuals.delete(plane.id)

@@ -183,7 +183,7 @@ function drawScanner(g: PIXI.Graphics, cont: PIXI.Container, cx: number, num: nu
 // El jetway cuelga desde la parte superior del terminal (GATE_TOP_Y) hasta
 // donde el avión conecta (GATE_BOT_Y = GATE_POS.y).
 const GATE_TOP_Y = APRON_Y + 18   // 66 — inicio del terminal en la zona de puertas
-const GATE_BOT_Y = 118            // coincide con GATE_POS.y
+const GATE_BOT_Y = 145            // coincide con GATE_POS.y
 
 function drawGate(g: PIXI.Graphics, cont: PIXI.Container, gx: number, label: string): void {
   const w = 48, h = GATE_BOT_Y - GATE_TOP_Y   // 52 px
@@ -402,7 +402,7 @@ export function drawBackground(
   for (let i = 0; i < numGates; i++) drawGate(g, cont, GATE_POS[i].x, `G${i + 1}`)
 
   // Sub-zona cola de embarque: desde GATE_BOT_Y hasta BOARD_BOT
-  const BOARD_BOT = 248
+  const BOARD_BOT = 275
   g.lineStyle(1, 0x22c55e, 0.2)
   g.moveTo(GATES_X, GATE_BOT_Y); g.lineTo(GATES_X + GATES_W, GATE_BOT_Y)
   g.beginFill(0x14532d, 0.07); g.lineStyle(0)
