@@ -15,12 +15,64 @@ const SHIRTS = [
 const SKINS = ['#f1c9a5','#e0a878','#c98b5e','#9c6b43','#6e4a2f','#f5d6b8']
 const HAIR  = ['#2b2218','#4a3526','#6b4a2f','#9a9a9a','#1c1c22','#a8651f','#d9c27a']
 
+// ── Animación de caminata de pasajeros ────────────────────────────────────────
+
+export interface PassengerAnim { x: number; y: number; walk: number }
+
+// Lerp fraccional escalado con dt.
+// LERP_BASE=0.88 → factor≈12% por frame a speed=1, 60fps.
+// Propiedad clave: el pasajero cubre ~92% de la distancia dentro del tiempo de
+// servicio de check-in (20 frames), sin importar la velocidad de simulación.
+const LERP_BASE = 0.88
+
+const ENTRANCE_X     = 72
+const ENTRANCE_Y_MIN = 42
+const ENTRANCE_Y_MAX = 318
+
+function lerpPassenger(
+  id: number,
+  tx: number, ty: number,
+  animMap: Map<number, PassengerAnim>,
+  dt: number,
+): { x: number; y: number; moving: boolean; walk: number } {
+  if (!animMap.has(id)) {
+    const spawnY = ENTRANCE_Y_MIN + (id * 47) % (ENTRANCE_Y_MAX - ENTRANCE_Y_MIN)
+    animMap.set(id, { x: ENTRANCE_X, y: spawnY, walk: 0 })
+  }
+
+  const cur = animMap.get(id)!
+
+  if (dt <= 0) return { x: cur.x, y: cur.y, moving: false, walk: cur.walk }
+
+  const dx     = tx - cur.x
+  const dy     = ty - cur.y
+  // factor escala con dt: mismo % de acercamiento por unidad de tiempo de simulación
+  const factor = 1 - Math.pow(LERP_BASE, 60 * dt)
+  const moveX  = dx * factor
+  const moveY  = dy * factor
+  const moved  = Math.hypot(moveX, moveY)
+
+  if (moved < 0.5) {
+    cur.x = tx; cur.y = ty
+    return { x: tx, y: ty, moving: false, walk: cur.walk }
+  }
+
+  cur.x += moveX
+  cur.y += moveY
+  cur.walk += moved * 0.04   // 2 cambios de paso por cada 50 px recorridos
+  return { x: cur.x, y: cur.y, moving: true, walk: cur.walk }
+}
+
+// ── Helpers de construcción ───────────────────────────────────────────────────
+
 function makeRenderPassenger(
   p: Passenger,
   x: number, y: number,
   state: RenderPassenger['state'],
   station: RenderPassenger['station'],
   gateIdx: number,
+  moving = false,
+  walk   = 0,
 ): RenderPassenger {
   return {
     id: p.id, x, y,
@@ -28,8 +80,8 @@ function makeRenderPassenger(
     skin:  SKINS[p.id  % SKINS.length],
     hair:  HAIR[p.id   % HAIR.length],
     bag:   p.id % 3 !== 0,
-    moving: false,
-    walk: 2,
+    moving,
+    walk,
     state, station, gateIdx,
     tx: 0, ty: 0, wait: 0,
   }
@@ -39,17 +91,16 @@ function makeRenderPassenger(
 function assignPositions(
   passengers: Passenger[],
   stations: WorldStations,
-  activeGateIds: Set<number>,   // puertas con avión activo (no crasheado/cancelado)
+  activeGateIds: Set<number>,
+  animMap: Map<number, PassengerAnim>,
+  dt: number,
 ): RenderPassenger[] {
   type PGroup = Passenger[]
   const checkinQ:    PGroup = []
   const checkinSrv:  PGroup = []
   const securityQ:   PGroup = []
   const securitySrv: PGroup = []
-  // waiting_gate: aún sin puerta asignada (gateId = -1)
-  // Se muestran en el pasillo entre seguridad y embarque, distribuidos
   const waitingGate: PGroup = []
-  // boarding_q / boarding_s: ya tienen gateId asignado por el motor
   const gateQ   = new Map<number, PGroup>()
   const gateBrd = new Map<number, PGroup>()
 
@@ -65,11 +116,9 @@ function assignPositions(
       case 'boarding_q': {
         const g = p.gateId >= 0 ? p.gateId : 0
         if (activeGateIds.has(g)) {
-          // Puerta operativa: cola normal
           if (!gateQ.has(g)) gateQ.set(g, [])
           gateQ.get(g)!.push(p)
         } else {
-          // Puerta cerrada (crash/cancelado): mover al pasillo de espera
           waitingGate.push(p)
         }
         break
@@ -89,64 +138,67 @@ function assignPositions(
   // Cola check-in
   checkinQ.forEach((p, i) => {
     const slot = checkin.slots[i % checkin.slots.length]
-    result.push(makeRenderPassenger(p, slot.x, slot.y, 'queue', 'checkin', -1))
+    const anim = lerpPassenger(p.id, slot.x, slot.y, animMap, dt)
+    result.push(makeRenderPassenger(p, anim.x, anim.y, 'queue', 'checkin', -1, anim.moving, anim.walk))
   })
 
   // Servidores check-in
   checkinSrv.forEach((p, i) => {
-    const srv = checkin.servers[i % checkin.servers.length]
-    result.push(makeRenderPassenger(p, srv.x, srv.y, 'toserver', 'checkin', -1))
+    const srv  = checkin.servers[i % checkin.servers.length]
+    const anim = lerpPassenger(p.id, srv.x, srv.y, animMap, dt)
+    result.push(makeRenderPassenger(p, anim.x, anim.y, 'toserver', 'checkin', -1, anim.moving, anim.walk))
   })
 
   // Cola seguridad
   securityQ.forEach((p, i) => {
     const slot = security.slots[i % security.slots.length]
-    result.push(makeRenderPassenger(p, slot.x, slot.y, 'queue', 'security', -1))
+    const anim = lerpPassenger(p.id, slot.x, slot.y, animMap, dt)
+    result.push(makeRenderPassenger(p, anim.x, anim.y, 'queue', 'security', -1, anim.moving, anim.walk))
   })
 
   // Servidores seguridad
   securitySrv.forEach((p, i) => {
-    const srv = security.servers[i % security.servers.length]
-    result.push(makeRenderPassenger(p, srv.x, srv.y, 'toserver', 'security', -1))
+    const srv  = security.servers[i % security.servers.length]
+    const anim = lerpPassenger(p.id, srv.x, srv.y, animMap, dt)
+    result.push(makeRenderPassenger(p, anim.x, anim.y, 'toserver', 'security', -1, anim.moving, anim.walk))
   })
 
-  // waiting_gate: pasillo entre seguridad y embarque (x: 342–360)
-  // Se distribuyen verticalmente por el número de puerta (round-robin)
-  // para que se vean "caminando hacia su puerta"
+  // waiting_gate: pasillo entre seguridad y embarque
   {
     const CORRIDOR_X0 = 344
-    const CORRIDOR_X1 = 360
     waitingGate.forEach((p, i) => {
       const gIdx  = i % numGates
       const g     = gate.gates[gIdx]
       if (!g) return
-      // Distribuir verticalmente dentro del band de esa puerta
       const col   = Math.floor(i / numGates) % 3
       const row   = Math.floor(i / (numGates * 3))
       const x     = CORRIDOR_X0 + col * 8
       const halfH = (g.qy1 - g.qy0) / 2
       const y     = g.bandY + (row % 5 - 2) * (halfH / 2.5)
-      result.push(makeRenderPassenger(p, x, Math.round(y), 'queue', 'gate', gIdx))
+      const anim  = lerpPassenger(p.id, x, Math.round(y), animMap, dt)
+      result.push(makeRenderPassenger(p, anim.x, anim.y, 'queue', 'gate', gIdx, anim.moving, anim.walk))
     })
   }
 
-  // boarding_q: cola específica de cada puerta (ya tienen gateId del motor)
+  // boarding_q
   for (const [gateIdx, pList] of gateQ) {
     const g = gate.gates[gateIdx % numGates]
     if (!g) continue
     pList.forEach((p, i) => {
       const slot = g.slots[i % g.slots.length]
-      result.push(makeRenderPassenger(p, slot.x, slot.y, 'queue', 'gate', gateIdx))
+      const anim = lerpPassenger(p.id, slot.x, slot.y, animMap, dt)
+      result.push(makeRenderPassenger(p, anim.x, anim.y, 'queue', 'gate', gateIdx, anim.moving, anim.walk))
     })
   }
 
-  // boarding_s: junto a la puerta del avión
+  // boarding_s
   for (const [gateIdx, pList] of gateBrd) {
     const g = gate.gates[gateIdx % numGates]
     if (!g) continue
     pList.forEach((p, i) => {
       const spread = (i % 3) * 5 - 5
-      result.push(makeRenderPassenger(p, g.doorX + spread, g.doorY, 'boarding', 'gate', gateIdx))
+      const anim   = lerpPassenger(p.id, g.doorX + spread, g.doorY, animMap, dt)
+      result.push(makeRenderPassenger(p, anim.x, anim.y, 'boarding', 'gate', gateIdx, anim.moving, anim.walk))
     })
   }
 
@@ -155,13 +207,11 @@ function assignPositions(
 
 // ── Pasajeros que abandonan (animación de salida) ─────────────────────────────
 
-// Zona ENTRADA (x: 0-84). Los abandonados caminan desde x≈68 hasta salir
-// por la izquierda en ~4 min simulados. Camiseta gris para distinguirlos.
 const ABANDON_FLOOR_TOP = 32
-const ABANDON_SHOW_MINS = 4      // cuántos min sim permanecen visibles
-const ABANDON_MAX       = 14     // máximo de abandonados simultáneos en pantalla
-const ABANDON_ROW_H     = 19     // separación vertical entre filas
-const ABANDON_ROWS      = 17     // número de filas (cubre todo el suelo)
+const ABANDON_SHOW_MINS = 4
+const ABANDON_MAX       = 14
+const ABANDON_ROW_H     = 19
+const ABANDON_ROWS      = 17
 
 function abandonVisuals(passengers: Passenger[], simTime: number): RenderPassenger[] {
   return passengers
@@ -170,20 +220,18 @@ function abandonVisuals(passengers: Passenger[], simTime: number): RenderPasseng
       p.timestamps.exitAt > 0 &&
       simTime - p.timestamps.exitAt < ABANDON_SHOW_MINS,
     )
-    .slice(-ABANDON_MAX)   // solo los más recientes
+    .slice(-ABANDON_MAX)
     .map(p => {
-      const elapsed = simTime - p.timestamps.exitAt                // 0 → SHOW_MINS
-      // Se mueven de x=68 hacia la izquierda, saliendo del canvas
+      const elapsed = simTime - p.timestamps.exitAt
       const x = 68 - elapsed * (80 / ABANDON_SHOW_MINS)
-      // Filas fijas por id para evitar solapamientos
       const y = ABANDON_FLOOR_TOP + (p.id % ABANDON_ROWS) * ABANDON_ROW_H
       return {
         id:      p.id,
         x, y,
-        shirt:   '#374151',   // gris oscuro: indicador visual de abandono
+        shirt:   '#374151',
         skin:    SKINS[p.id % SKINS.length],
         hair:    HAIR[p.id  % HAIR.length],
-        bag:     false,       // soltaron el equipaje
+        bag:     false,
         moving:  x > 2,
         walk:    p.id * 1.3 + elapsed * 10,
         state:   'queue'   as const,
@@ -200,21 +248,25 @@ export function buildWorld(
   state: SimState,
   config: SimConfig,
   planeVisuals: Map<number, PlaneVisual>,
+  passengerAnim: Map<number, PassengerAnim>,
   dt: number,
 ): World {
   const { passengers, planes, simTime } = state
 
-  // Solo pasajeros activos (ni abordados ni abandonados)
   const active = passengers.filter(
     p => p.state !== 'boarded' && p.state !== 'abandoned',
   )
 
-  // Para animación incluimos takeoff/airborne (completan su salida en pantalla)
+  // Limpiar entradas de pasajeros que ya salieron del sistema
+  const activeIds = new Set(active.map(p => p.id))
+  for (const id of passengerAnim.keys()) {
+    if (!activeIds.has(id)) passengerAnim.delete(id)
+  }
+
   const animPlanes = planes.filter(
     p => !['cancelled', 'crashed'].includes(p.state),
   )
 
-  // Puertas con avión operativo (excluye crash/cancel/airborne ya ido)
   const activeGateIds = new Set(
     planes
       .filter(p => !['crashed', 'cancelled', 'airborne'].includes(p.state))
@@ -225,7 +277,7 @@ export function buildWorld(
 
   return {
     passengers: [
-      ...assignPositions(active, stations, activeGateIds),
+      ...assignPositions(active, stations, activeGateIds, passengerAnim, dt),
       ...abandonVisuals(passengers, simTime),
     ],
     stations,

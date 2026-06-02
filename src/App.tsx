@@ -16,6 +16,7 @@ import { MetricsDashboard } from './ui/MetricsDashboard'
 
 import { draw }             from './canvas/render'
 import { buildWorld }       from './canvas/worldAdapter'
+import type { PassengerAnim } from './canvas/worldAdapter'
 import type { PlaneVisual } from './canvas/types'
 import {
   useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakToggle,
@@ -54,11 +55,13 @@ export default function App() {
   const { state, play, pause, reset: _reset, step } = useSimulation(config)
 
   // Posiciones y ángulos visuales de aviones (mutable, no causa re-render)
-  const planeVisualsRef = useRef<Map<number, PlaneVisual>>(new Map())
-  const lastSimTimeRef  = useRef(0)
+  const planeVisualsRef    = useRef<Map<number, PlaneVisual>>(new Map())
+  const passengerAnimRef   = useRef<Map<number, PassengerAnim>>(new Map())
+  const lastSimTimeRef     = useRef(0)
 
   const reset = useCallback(() => {
     planeVisualsRef.current.clear()
+    passengerAnimRef.current.clear()
     lastSimTimeRef.current = 0
     _reset()
   }, [_reset])
@@ -137,7 +140,7 @@ export default function App() {
     const dt = Math.max(0, state.simTime - lastSimTimeRef.current)
     lastSimTimeRef.current = state.simTime
 
-    const world = buildWorld(state, config, planeVisualsRef.current, dt)
+    const world = buildWorld(state, config, planeVisualsRef.current, passengerAnimRef.current, dt)
     draw(ctx, world, {
       theme:     t.theme,
       showPaths: t.showPaths,
