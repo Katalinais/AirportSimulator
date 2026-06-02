@@ -354,7 +354,7 @@ export class EventLoop {
     const type: PassengerType = Math.random() < 0.15 ? 'vip' : 'standard'
     const gateIdx = this.#leastLoadedGate()
     const flightId = this.#planes.find(
-      pl => pl.gateId === gateIdx && (['at_gate', 'boarding'] as string[]).includes(pl.state),
+      pl => pl.gateId === gateIdx && (['at_gate', 'boarding', 'delayed'] as string[]).includes(pl.state),
     )?.id ?? 0
     const p = new Passenger(type, flightId, this.#currentTime)
     p.setState('checkin_q', this.#currentTime)
@@ -394,7 +394,7 @@ export class EventLoop {
     // Buscar puerta con avión disponible y menor carga
     let gateIdx = this.#leastLoadedGate()
     const plane = this.#planes.find(
-      pl => pl.gateId === gateIdx && !pl.isFull() && ['at_gate', 'boarding'].includes(pl.state),
+      pl => pl.gateId === gateIdx && !pl.isFull() && ['at_gate', 'boarding', 'delayed'].includes(pl.state),
     )
 
     if (!plane) {
@@ -420,7 +420,7 @@ export class EventLoop {
     if (!p || p.state === 'abandoned') return
 
     const plane = this.#planes.find(
-      pl => pl.gateId === payload.gateIdx && !pl.isFull() && ['at_gate', 'boarding'].includes(pl.state),
+      pl => pl.gateId === payload.gateIdx && !pl.isFull() && ['at_gate', 'boarding', 'delayed'].includes(pl.state),
     )
     if (!plane) { p.setState('abandoned', this.#currentTime); this.#totalAbandoned++; return }
 
