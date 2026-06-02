@@ -1,9 +1,12 @@
 // Hook principal: bucle requestAnimationFrame con mutableRef, avance de pasajeros y aviones, HUD cada 100 ms
 
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { EventLoop }   from '../engine/eventLoop'
-import { Passenger }   from '../engine/passenger'
-import { Plane }       from '../engine/plane'
+import { EventLoop }          from '../engine/eventLoop'
+import { Passenger }          from '../engine/passenger'
+import { Plane }              from '../engine/plane'
+import type { QueueMetrics }  from '../engine/queue'
+
+export type { QueueMetrics }
 
 // ── Tipos del hook ────────────────────────────────────────────────────────────
 
@@ -40,15 +43,25 @@ export interface SimMetrics {
   littleL:     number   // número medio de pasajeros en el sistema (Lq + en servicio)
 }
 
+export interface RawQueueMetrics {
+  checkin:  QueueMetrics
+  security: QueueMetrics
+  boarding: QueueMetrics[]
+  arrived:  number
+  boarded:  number
+  abandoned:number
+}
+
 export interface SimState {
-  passengers:  Passenger[]
-  planes:      Plane[]
-  metrics:     SimMetrics
-  isRunning:   boolean
-  simTime:     number
-  crashes:     number
-  mechanical:  number
-  weather:     number
+  passengers:   Passenger[]
+  planes:       Plane[]
+  metrics:      SimMetrics
+  queueMetrics: RawQueueMetrics
+  isRunning:    boolean
+  simTime:      number
+  crashes:      number
+  mechanical:   number
+  weather:      number
 }
 
 // ── Config inicial ────────────────────────────────────────────────────────────
@@ -132,15 +145,17 @@ export function useSimulation(config: SimConfig) {
   const isRunningRef = useRef(false)
 
   // Estado React: solo para re-render de UI
+  const EMPTY_QM: QueueMetrics = { Lq: 0, Wq: 0, rho: 0, utilization: 0 }
   const [state, setState] = useState<SimState>({
-    passengers:  [],
-    planes:      [],
-    metrics:     { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
-    isRunning:   false,
-    simTime:     0,
-    crashes:     0,
-    mechanical:  0,
-    weather:     0,
+    passengers:   [],
+    planes:       [],
+    metrics:      { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
+    queueMetrics: { checkin: EMPTY_QM, security: EMPTY_QM, boarding: [], arrived: 0, boarded: 0, abandoned: 0 },
+    isRunning:    false,
+    simTime:      0,
+    crashes:      0,
+    mechanical:   0,
+    weather:      0,
   })
 
   // ── Inicializar motor ────────────────────────────────────────────────────
@@ -169,9 +184,17 @@ export function useSimulation(config: SimConfig) {
     const engineState = loop.getState()
     setState(prev => ({
       ...prev,
-      passengers: engineState.passengers,
-      planes:     engineState.planes,
-      metrics:    computeMetrics(loop, engineState.currentTime),
+      passengers:   engineState.passengers,
+      planes:       engineState.planes,
+      metrics:      computeMetrics(loop, engineState.currentTime),
+      queueMetrics: {
+        checkin:  engineState.metrics.checkin,
+        security: engineState.metrics.security,
+        boarding: engineState.metrics.boarding,
+        arrived:  loop.totalArrived,
+        boarded:  loop.totalBoarded,
+        abandoned:loop.totalAbandoned,
+      },
       simTime:    engineState.currentTime,
       crashes:    loop.totalCrashes,
       mechanical: loop.totalMechanical,
@@ -234,15 +257,17 @@ export function useSimulation(config: SimConfig) {
     Passenger.resetCounter()
     Plane.resetCounter()
     loopRef.current = new EventLoop(toEngineConfig(configRef.current))
+    const EQM: QueueMetrics = { Lq: 0, Wq: 0, rho: 0, utilization: 0 }
     setState({
-      passengers:  [],
-      planes:      [],
-      metrics:     { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
-      isRunning:   false,
-      simTime:     0,
-      crashes:     0,
-      mechanical:  0,
-      weather:     0,
+      passengers:   [],
+      planes:       [],
+      metrics:      { Lq: 0, Wq: 0, rho: 0, throughput: 0, abandonRate: 0, littleL: 0 },
+      queueMetrics: { checkin: EQM, security: EQM, boarding: [], arrived: 0, boarded: 0, abandoned: 0 },
+      isRunning:    false,
+      simTime:      0,
+      crashes:      0,
+      mechanical:   0,
+      weather:      0,
     })
   }, [])
 

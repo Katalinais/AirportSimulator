@@ -1,0 +1,184 @@
+/* Estilos retro del tablero de nueva-ui. Usa BEM ligero prefijado con "nu-"
+   para no colisionar con las clases de Tailwind del resto de la app. */
+
+:root {
+  --nu-bg:    #0f111a;
+  --nu-bg2:   #161a26;
+  --nu-panel: #1c2130;
+  --nu-panel2:#232a3d;
+  --nu-edge:  #0a0c14;
+  --nu-line:  #313a52;
+  --nu-ink:   #e7ecf6;
+  --nu-muted: #8b94ab;
+  --nu-amber: #ffce4d;
+}
+
+/* ── Fondo global ─────────────────────────────────────────────────────────── */
+
+.nu-root {
+  background:
+    radial-gradient(120% 80% at 50% -10%, #1d2335 0%, var(--nu-bg) 60%),
+    var(--nu-bg);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  color: var(--nu-ink);
+}
+
+/* ── Logo / topbar ────────────────────────────────────────────────────────── */
+
+.nu-logo-mark {
+  font-size: 20px;
+  color: var(--nu-amber);
+  background: var(--nu-panel);
+  border: 2px solid var(--nu-line);
+  width: 38px; height: 38px;
+  display: grid; place-items: center;
+  box-shadow: 0 3px 0 var(--nu-edge);
+  flex-shrink: 0;
+}
+
+.nu-logo-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  letter-spacing: .5px;
+}
+
+/* ── Tablero (canvas wrapper) ─────────────────────────────────────────────── */
+
+.nu-board-wrap {
+  perspective: 1000px;
+}
+
+.nu-board-shadow {
+  transition: transform .35s ease;
+  transform-origin: 50% 60%;
+}
+
+.nu-board {
+  background: linear-gradient(#2a3146, #1a2030);
+  border: 4px solid #0a0d16;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow:
+    inset 0 0 0 2px #39435f,
+    inset 0 2px 14px rgba(0,0,0,.55),
+    0 18px 40px rgba(0,0,0,.5);
+  display: block;
+  line-height: 0;
+}
+
+.nu-screen {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 4px;
+  background: #1c2230;
+  box-shadow: 0 0 0 3px #0a0d16, inset 0 0 24px rgba(0,0,0,.35);
+}
+
+/* ── Barra de controles ───────────────────────────────────────────────────── */
+
+.nu-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: var(--nu-panel);
+  border: 2px solid var(--nu-line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 0 var(--nu-edge);
+}
+
+.nu-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: var(--nu-ink);
+  cursor: pointer;
+  background: var(--nu-panel2);
+  border: 2px solid var(--nu-line);
+  border-radius: 7px;
+  padding: 11px 14px;
+  box-shadow: 0 3px 0 var(--nu-edge);
+  transition: transform .05s, background .15s;
+  white-space: nowrap;
+}
+.nu-btn:hover  { background: #2c344b; }
+.nu-btn:active { transform: translateY(3px); box-shadow: 0 0 0 var(--nu-edge); }
+
+.nu-btn.primary          { background: #2f6d5e; border-color: #3c8c78; color: #eafff8; }
+.nu-btn.primary.running  { background: #7a5a1e; border-color: #b58a33; color: #fff3d6; }
+.nu-btn.ghost            { background: transparent; color: var(--nu-muted); }
+
+/* Grupo segmentado (velocidad) */
+.nu-seg       { display: flex; align-items: center; gap: 7px; }
+.nu-seg-label { font-family: 'Press Start 2P', monospace; font-size: 7px; color: var(--nu-muted); letter-spacing: .5px; }
+
+.nu-segbtn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  background: var(--nu-bg2);
+  color: var(--nu-muted);
+  border: 2px solid var(--nu-line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  cursor: pointer;
+  transition: background .1s, color .1s, border-color .1s;
+}
+.nu-segbtn.active {
+  background: var(--nu-amber);
+  color: #2a1f00;
+  border-color: var(--nu-amber);
+}
+
+/* ── Tarjetas de estadísticas ─────────────────────────────────────────────── */
+
+.nu-stats {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 10px;
+}
+
+.nu-stat {
+  background: var(--nu-panel);
+  border: 2px solid var(--nu-line);
+  border-radius: 9px;
+  padding: 10px 8px 8px;
+  text-align: center;
+  box-shadow: 0 4px 0 var(--nu-edge);
+}
+.nu-stat.wide { background: #221b16; border-color: #4a3a26; }
+
+.nu-stat-num {
+  font-family: 'VT323', monospace;
+  font-size: 34px;
+  line-height: .9;
+}
+.nu-stat-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6.5px;
+  color: var(--nu-muted);
+  margin-top: 6px;
+  letter-spacing: .3px;
+}
+
+/* ── Notificaciones (toast) ───────────────────────────────────────────────── */
+
+.nu-toast {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid;
+  line-height: 1.6;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+.nu-toast.crash      { background: #1e0a0a; border-color: #7f1d1d; color: #fca5a5; }
+.nu-toast.mechanical { background: #1e1200; border-color: #78350f; color: #fcd34d; }
+.nu-toast.weather    { background: #0a1020; border-color: #1e3a5f; color: #93c5fd; }
+
+@media (max-width: 780px) {
+  .nu-stats { grid-template-columns: repeat(4, 1fr); }
+  .nu-logo-text { font-size: 10px; }
+}

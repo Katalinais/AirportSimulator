@@ -90,8 +90,6 @@ export function ControlPanel({ config, isRunning, onConfigChange, onPlay, onPaus
       </Section>
 
       <Section title="Vuelos">
-        <Slider label="Puertas" value={config.gates} min={1} max={4}
-          onChange={v => onConfigChange({ gates: v })} />
         <Slider label="Prob. retraso" value={config.delayProb} min={0} max={0.5} step={0.05} decimals={2}
           onChange={v => onConfigChange({ delayProb: v })} />
         <Slider label="Paciencia máx." value={config.patienceThreshold} min={3} max={20} unit=" min"
