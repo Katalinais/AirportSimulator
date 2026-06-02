@@ -1,4 +1,4 @@
-/* Estilos retro del tablero de nueva-ui. Usa BEM ligero prefijado con "nu-"
+/* Estilos retro del tablero pixel-art (src/canvas/). BEM prefijado con "nu-"
    para no colisionar con las clases de Tailwind del resto de la app. */
 
 :root {

@@ -1,5 +1,5 @@
 // Capa de presentación principal: integra el motor TypeScript con el
-// renderer pixel-art de nueva-ui. No modifica lógica de simulación.
+// renderer pixel-art de canvas/.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 
@@ -8,19 +8,19 @@ import type { SimConfig }                 from './hooks/useSimulation'
 import { useMetrics }                     from './hooks/useMetrics'
 import { fmtSimTime, fmtNum, classifyRho } from './engine/metrics'
 
-import { ControlPanel }      from './ui/ControlPanel'
-import { ToggleModules }     from './ui/ToggleModules'
-import { MetricsCard }       from './ui/MetricsCard'
-import { QueueChart }        from './ui/QueueChart'
-import { MetricsDashboard }  from './ui/MetricsDashboard'
+import { ControlPanel }     from './ui/ControlPanel'
+import { ToggleModules }    from './ui/ToggleModules'
+import { MetricsCard }      from './ui/MetricsCard'
+import { QueueChart }       from './ui/QueueChart'
+import { MetricsDashboard } from './ui/MetricsDashboard'
 
-import { draw }             from './nueva-ui/render'
-import { buildWorld }       from './nueva-ui/worldAdapter'
-import type { PlaneVisual } from './nueva-ui/types'
+import { draw }             from './canvas/render'
+import { buildWorld }       from './canvas/worldAdapter'
+import type { PlaneVisual } from './canvas/types'
 import {
   useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakToggle,
-} from './nueva-ui/TweaksPanel'
-import './nueva-ui/nueva-ui.css'
+} from './canvas/TweaksPanel'
+import './canvas/canvas.css'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
